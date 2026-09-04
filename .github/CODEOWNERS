@@ -1,0 +1,24 @@
+# GitHub CODEOWNERS
+# This file automatically requests reviews from the code owners when changes are made.
+# You can replace the @placeholders with the actual GitHub usernames of your team members.
+
+# Fallback: The repository owner (Khoa) owns everything by default
+* @tumo07
+
+# 1. Qt Dashboard / PC Team
+/qt_dashboard/ @qt-member-username
+
+# 2. Translator Firmware Team
+/translator_firmware/ @translator-member-username
+
+# 3. Front BCM Firmware Team
+/front_bcm_firmware/ @front-bcm-member-username
+
+# 4. Rear BCM Firmware Team
+/rear_bcm_firmware/ @rear-bcm-member-username
+
+# 5. Main MCU (STM32F4-Discovery) Team
+/main_mcu_firmware/ @main-mcu-member-username
+
+# Shared CAN Messages (Requires review from the team lead or all members)
+/can_messages_shared/ @tumo07

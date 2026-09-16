@@ -96,9 +96,15 @@ extern "C" {
 // DLC: 1-2 bytes per message
 // Interval: 100ms or 500ms
 
-#define CAN_ID_HEARTBEAT_CENTRAL    0x600  // Central ECU alive pulse
-#define CAN_ID_HEARTBEAT_FRONT_BCM  0x610  // Front BCM alive pulse
-#define CAN_ID_HEARTBEAT_REAR_BCM   0x620  // Rear BCM alive pulse
+#define CAN_ID_HEARTBEAT_CENTRAL    0x600  // Central ECU alive pulse (100ms)
+#define CAN_ID_HEARTBEAT_FRONT_BCM  0x610  // Front BCM alive pulse (100ms)
+#define CAN_ID_HEARTBEAT_REAR_BCM   0x620  // Rear BCM alive pulse (100ms)
+
+// Blink Tick: Central ECU -> All BCMs (every 500ms)
+// Synchronises turn-signal toggling across Front BCM and Rear BCM.
+// On each tick, armed BCMs toggle their respective turn-signal outputs.
+// DLC: 1, Byte 0: 0x01
+#define CAN_ID_BLINK_TICK           0x130
 
 
 // ==============================================================================
@@ -361,5 +367,76 @@ typedef enum {
 #ifdef __cplusplus
 }
 #endif
+
+// ==============================================================================
+// 12. NODE IDENTIFIERS
+// ==============================================================================
+// Used in error messages (e.g., CAN_ID_ERROR_CENTRAL_ECU Byte 0) to identify
+// which node originated the fault report.
+
+#define NODE_ID_TRANSLATOR          0x00  // Blue Pill CAN-UART bridge
+#define NODE_ID_CENTRAL_ECU         0x01  // STM32F4-Discovery main ECU
+#define NODE_ID_FRONT_BCM           0x02  // Blue Pill front body controller
+#define NODE_ID_REAR_BCM            0x03  // Blue Pill rear body controller
+
+
+// ==============================================================================
+// 13. SIMPLE ERROR CODES (context field in CAN_ID_ERROR_* messages)
+// ==============================================================================
+// These map to the corresponding OBD DTC codes in Section 5.
+// Used in Byte 2 of error messages as a compact status indicator.
+
+typedef enum {
+    ERR_NONE                = 0x00,  // No fault                   -> DTC_P0000
+    ERR_ACTUATOR_FAULT      = 0x01,  // Relay or LED open circuit  -> DTC_B1001/B1002
+    ERR_SENSOR_READ         = 0x02,  // Ultrasonic / sensor fail   -> DTC_B1021
+    ERR_NODE_TIMEOUT        = 0x03,  // BCM heartbeat lost         -> DTC_C1002/C1003
+    ERR_OVERCURRENT         = 0x04,  // Motor current exceeded     -> DTC_B1020
+    ERR_ACTUATOR_STALL      = 0x05,  // Servo / trunk stall        -> DTC_B1020
+    ERR_WIPER_STALL         = 0x06,  // Wiper motor jammed         -> DTC_B1010
+    ERR_OPEN_CIRCUIT        = 0x07   // Headlight open circuit     -> DTC_B1001/B1002
+} SimpleErrorCode_t;
+
+
+// ==============================================================================
+// 14. SENSOR PAYLOAD DETAILS
+// ==============================================================================
+
+// ========== CAN_ID_REPORT_REAR_SENSORS (Rear BCM -> Central ECU) ==========
+// DLC: 4
+// Byte 0-1: HC-SR04 distance in centimetres (PACK_U16 big-endian, 0 = no object)
+// Byte 2:   Trunk hall-effect sensor state  (0 = CLOSED, 1 = OPEN)
+// Byte 3:   Parking proximity level         (ParkingLevel_t below)
+
+typedef enum {
+    PARKING_CLEAR           = 0x00,  // > 100 cm   — no alert
+    PARKING_CAUTION         = 0x01,  // 61-100 cm  — yellow indicator
+    PARKING_WARNING         = 0x02,  // 31-60 cm   — orange indicator
+    PARKING_CRITICAL        = 0x03   // 0-30 cm    — red + audio alert
+} ParkingLevel_t;
+
+// ========== CAN_ID_STATUS_VEHICLE_STATE speed field (Byte 2-3) ==========
+// Speed is packed as a big-endian uint16 in km/h (0-999).
+// Use ENCODE_SPEED / DECODE_SPEED macros for consistency.
+
+// ========== CAN_ID_HEARTBEAT_* payload ==========
+// DLC: 2
+// Byte 0: Node uptime counter (wraps at 255, increments each 100ms)
+// Byte 1: Node status flags
+#define HEARTBEAT_FLAG_INIT_OK      (1 << 0)  // 0x01 - Peripheral init successful
+#define HEARTBEAT_FLAG_CAN_OK       (1 << 1)  // 0x02 - CAN bus healthy
+#define HEARTBEAT_FLAG_SENSOR_OK    (1 << 2)  // 0x04 - All sensors reading valid
+#define HEARTBEAT_FLAG_ERROR_ACTIVE (1 << 3)  // 0x08 - At least one DTC active
+
+
+// ==============================================================================
+// 15. PROXIMITY DISTANCE THRESHOLDS (cm)
+// ==============================================================================
+
+#define DIST_THRESHOLD_CAUTION_CM   100U   // Below this -> PARKING_CAUTION
+#define DIST_THRESHOLD_WARNING_CM    60U   // Below this -> PARKING_WARNING
+#define DIST_THRESHOLD_CRITICAL_CM   30U   // Below this -> PARKING_CRITICAL
+#define DIST_MAX_RANGE_CM           400U   // HC-SR04 max reliable range
+#define DIST_NO_OBJECT              0xFFFFU // Sentinel: no object detected
 
 #endif // CAN_MESSAGES_H

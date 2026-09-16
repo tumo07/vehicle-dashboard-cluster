@@ -158,68 +158,49 @@ static HAL_StatusTypeDef CAN_ConfigExactStdIdFilter(uint32_t filter_bank, uint16
 */
 static HAL_StatusTypeDef CAN_ConfigGatewayFilters(void)
 {
-	/* Filter bank 0: nhận dữ liệu tốc độ. */
-	if (CAN_ConfigExactStdIdFilter(0U, CAN_ID_SPEED) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 0: Trạng thái phương tiện - tốc độ, gear, nhiệt độ (Central ECU -> Qt). */
+	if (CAN_ConfigExactStdIdFilter(0U, CAN_ID_STATUS_VEHICLE_STATE) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 1: nhận dữ liệu mức nhiên liệu. */
-	if (CAN_ConfigExactStdIdFilter(1U, CAN_ID_FUEL) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 1: Trạng thái hệ thống đèn (Central ECU -> Qt). */
+	if (CAN_ConfigExactStdIdFilter(1U, CAN_ID_STATUS_LIGHTS_STATE) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 2: nhận trạng thái đèn chiếu sáng. */
-	if (CAN_ConfigExactStdIdFilter(2U, CAN_ID_HEADLIGHT_STATE) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 2: Trạng thái cần gạt nước (Central ECU -> Qt). */
+	if (CAN_ConfigExactStdIdFilter(2U, CAN_ID_STATUS_WIPERS_STATE) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 3: nhận tín hiệu nhịp điều khiển đèn báo rẽ. */
-	if (CAN_ConfigExactStdIdFilter(3U, CAN_ID_BLINK_TICK) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 3: Trạng thái cốp xe (Central ECU -> Qt). */
+	if (CAN_ConfigExactStdIdFilter(3U, CAN_ID_STATUS_TRUNK_STATE) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 4: nhận trạng thái của bộ điều khiển phía trước. */
-	if (CAN_ConfigExactStdIdFilter(4U, CAN_ID_FRONT_STATUS) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 4: Lỗi từ Central ECU. */
+	if (CAN_ConfigExactStdIdFilter(4U, CAN_ID_ERROR_CENTRAL_ECU) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 5: nhận thông báo lỗi từ bộ điều khiển phía trước. */
-	if (CAN_ConfigExactStdIdFilter(5U, CAN_ID_FRONT_ERROR) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 5: Lỗi từ Front BCM. */
+	if (CAN_ConfigExactStdIdFilter(5U, CAN_ID_ERROR_FRONT_BCM) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 6: nhận trạng thái của bộ điều khiển phía sau. */
-	if (CAN_ConfigExactStdIdFilter(6U, CAN_ID_REAR_STATUS) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 6: Lỗi từ Rear BCM. */
+	if (CAN_ConfigExactStdIdFilter(6U, CAN_ID_ERROR_REAR_BCM) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 7: nhận dữ liệu khoảng cách phía sau. */
-	if (CAN_ConfigExactStdIdFilter(7U, CAN_ID_REAR_DISTANCE) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 7: Phản hồi chẩn đoán từ Central ECU. */
+	if (CAN_ConfigExactStdIdFilter(7U, CAN_ID_DIAG_RESPONSE) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 8: nhận thông báo lỗi từ bộ điều khiển phía sau. */
-	if (CAN_ConfigExactStdIdFilter(8U, CAN_ID_REAR_ERROR) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 8: Heartbeat từ Central ECU. */
+	if (CAN_ConfigExactStdIdFilter(8U, CAN_ID_HEARTBEAT_CENTRAL) != HAL_OK)
+		{ return HAL_ERROR; }
 
-	/* Filter bank 9: nhận thông báo lỗi chung của toàn hệ thống. */
-	if (CAN_ConfigExactStdIdFilter(9U, CAN_ID_SYSTEM_ERROR) != HAL_OK)
-		{
-			return HAL_ERROR;
-		}
+	/* Bank 9: Blink tick đồng bộ đèn báo rẽ (Central ECU -> BCMs). */
+	if (CAN_ConfigExactStdIdFilter(9U, CAN_ID_BLINK_TICK) != HAL_OK)
+		{ return HAL_ERROR; }
 
 	return HAL_OK;
 }
+
 
 /*
 * @brief Tạo và gửi một CAN Standard Data Frame.
@@ -325,50 +306,50 @@ UART_SendString("CAN ready\r\n");
   {
 	  HAL_Delay(100);
 	  /*
-	   * Loopback test
-	  uint8_t speed_data[2] =
+	   * Loopback test - uncomment to verify CAN bus communication
+	  uint8_t vehicle_state_data[7] =
 	  {
-			  0x00,
-			  0x64
+			  GEAR_PARK,          // Byte 0: Gear
+			  STATE_ENGINE_RUNNING,// Byte 1: State flags
+			  0x00,               // Byte 2: Speed high (0 km/h)
+			  0x00,               // Byte 3: Speed low
+			  0x00,               // Byte 4: RPM %
+			  ENCODE_TEMP(25),    // Byte 5: Coolant temp 25C
+			  ENCODE_VOLTAGE(12.6)// Byte 6: Battery 12.6V
 	  };
 
-	  uint8_t fuel_data[1] =
+	  uint8_t lights_state_data[1] =
 	  {
-			  75U
+			  STATUS_HL_ACTIVE | STATUS_DRL_ACTIVE
 	  };
 
-	  uint8_t front_status_data[2] =
+	  uint8_t rear_sensors_data[4] =
 	  {
-			  0x05,
-			  0x01
+			  0x00,               // Byte 0: Distance high (150 cm)
+			  0x96,               // Byte 1: Distance low
+			  0x00,               // Byte 2: Trunk hall (CLOSED)
+			  PARKING_CAUTION     // Byte 3: Proximity level
 	  };
 
-	  uint8_t rear_distance_data[2] =
+	  uint8_t error_data[5] =
 	  {
-			  0x00,
-			  0x96
+			  DTC_SEVERITY_WARNING,                   // Byte 0: Severity
+			  UNPACK_HIGH_BYTE(DTC_B1021),            // Byte 1: DTC high
+			  UNPACK_LOW_BYTE(DTC_B1021),             // Byte 2: DTC low
+			  1U,                                     // Byte 3: Error counter
+			  NODE_ID_REAR_BCM                        // Byte 4: Source node
 	  };
 
-	  uint8_t system_error_data[3] =
-	  {
-			  NODE_ID_REAR_BCM,
-			  ERR_TRUNK_SENSOR,
-			  0x01
-	  };
-
-	  CAN_SendStandardFrame(CAN_ID_SPEED, speed_data, 2U);
+	  CAN_SendStandardFrame(CAN_ID_STATUS_VEHICLE_STATE, vehicle_state_data, 7U);
 	  HAL_Delay(300);
 
-	  CAN_SendStandardFrame(CAN_ID_FUEL, fuel_data, 1U);
+	  CAN_SendStandardFrame(CAN_ID_STATUS_LIGHTS_STATE, lights_state_data, 1U);
 	  HAL_Delay(300);
 
-	  CAN_SendStandardFrame(CAN_ID_FRONT_STATUS, front_status_data, 2U);
+	  CAN_SendStandardFrame(CAN_ID_REPORT_REAR_SENSORS, rear_sensors_data, 4U);
 	  HAL_Delay(300);
 
-	  CAN_SendStandardFrame(CAN_ID_REAR_DISTANCE, rear_distance_data, 2U);
-	  HAL_Delay(300);
-
-	  CAN_SendStandardFrame(CAN_ID_SYSTEM_ERROR, system_error_data, 3U);
+	  CAN_SendStandardFrame(CAN_ID_ERROR_REAR_BCM, error_data, 5U);
 	  HAL_Delay(300);
 	  */
     /* USER CODE END WHILE */

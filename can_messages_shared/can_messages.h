@@ -1,3 +1,39 @@
+﻿/**
+ * =============================================================================
+ * @file    can_messages.h
+ * @project Smart Vehicle Dashboard Cluster
+ * @version 3.0 - Complete Coordinator Architecture
+ * =============================================================================
+ *
+ * ARCHITECTURE OVERVIEW
+ * =====================
+ *
+ * MESSAGE FLOW:
+ *  [1] User presses Qt button
+ *  [2] Qt --(GROUP A 0x10x)--> Central ECU: "I want to open trunk"
+ *  [3] Central ECU validates against state machine:
+ *       |-- REJECTED --(0x105 NACK)--> Qt: banner "Trunk locked - vehicle moving"
+ *       `-- APPROVED -+--(GROUP B 0x21x)--> Rear BCM: "Execute trunk open"
+ *                     `--(GROUP C 0x303)--> Qt: "Trunk state: OPENING"
+ *  [4] Rear BCM executes, reports every 200ms --(GROUP D 0x41x)--> Central ECU
+ *  [5] Central ECU relays --(GROUP C 0x303)--> Qt: "Trunk 45%..."
+ *  [6] Fault: BCM --(GROUP E 0x51x)--> Central ECU {DTC_B1020}
+ *      Central ECU --(GROUP F 0x600)--> Qt: [RED BANNER "B1020 Trunk motor stall"]
+ *  [7] Qt diag: Qt --(0x104)--> Central ECU: "Read DTCs"
+ *      Central ECU --(0x305, multi-frame)--> Qt: [DTC list]
+ *
+ * ID MAP:
+ *   0x100-0x105  GROUP A  Qt <-> Central ECU  (commands + ACK)
+ *   0x200-0x211  GROUP B  Central ECU -> BCMs (approved commands)
+ *   0x300-0x305  GROUP C  Central ECU -> Qt   (real-time status)
+ *   0x400-0x411  GROUP D  BCMs -> Central ECU (status + sensors)
+ *   0x500-0x510  GROUP E  BCMs -> Central ECU (fault reports)
+ *   0x600-0x610  GROUP F  Central ECU -> Qt   (banner + diag)
+ *   0x700-0x720  GROUP G  Heartbeat & sync
+ *   0x130        BLINK_TICK  turn-signal sync
+ * =============================================================================
+ */
+
 #ifndef CAN_MESSAGES_H
 #define CAN_MESSAGES_H
 
@@ -8,151 +44,202 @@
 extern "C" {
 #endif
 
-// ==============================================================================
-// ARCHITECTURE OVERVIEW
-// ==============================================================================
-// Central ECU (Main ECU) is the COORDINATOR and DECISION MAKER
-// - Receives ALL commands/requests from Qt (via CAN Translator)
-// - Validates state and context (e.g., is vehicle in PARK before trunk open?)
-// - Approves/Rejects commands and sends to respective BCMs
-// - Monitors all sensor data and error states
-// - Communicates real-time status/errors back to Qt for UI updates
-// 
-// BCMs (Front & Rear) are CONTROL EXECUTORS
-// - Receive APPROVED commands from Central ECU only
-// - Execute actuator control (relays, motors, LEDs)
-// - Report status, sensor data, and errors back to Central ECU
-// - Central ECU acts as intermediary between Qt and BCMs
-//
-// Qt Application (via CAN Translator)
-// - Sends user commands/requests to Central ECU
-// - Receives real-time sensor updates from Central ECU
-// - Displays diagnostic errors in banner style (OBD-like)
-// - Shows vehicle state, faults, and audit logs
+/* ============================================================================
+ * SECTION 1: NODE IDENTIFIERS
+ * ============================================================================ */
+#define NODE_ID_TRANSLATOR      0x00U
+#define NODE_ID_CENTRAL_ECU     0x01U
+#define NODE_ID_FRONT_BCM       0x02U
+#define NODE_ID_REAR_BCM        0x03U
+
+/* ============================================================================
+ * SECTION 2: CAN MESSAGE IDs
+ * ============================================================================ */
+
+/* GROUP A: Qt -> Central ECU (User Commands) */
+#define CAN_ID_CMD_LIGHT_CONTROL    0x100U  /* DLC:2 Byte0:CmdLight_t Byte1:brightness 0-100% */
+#define CAN_ID_CMD_WIPER_CONTROL    0x101U  /* DLC:2 Byte0:CmdWiper_t Byte1:0x01=spray */
+#define CAN_ID_CMD_TURN_SIGNAL      0x102U  /* DLC:1 Byte0:CmdTurn_t */
+#define CAN_ID_CMD_TRUNK_CONTROL    0x103U  /* DLC:1 Byte0:CmdTrunk_t — validated by Central ECU */
+#define CAN_ID_CMD_DIAGNOSTIC       0x104U  /* DLC:2-8 Byte0:DiagCmd_t Byte1-7:params */
+#define CAN_ID_CMD_ACK              0x105U
+/* Central ECU -> Qt, within 10ms of any GROUP A message
+ * DLC:3 Byte0:cmd-id-low-nibble Byte1:AckStatus_t Byte2:ValidationResult_t */
+
+/* GROUP B: Central ECU -> BCMs (Approved Commands Only) */
+#define CAN_ID_EXEC_FRONT_LIGHTS    0x200U  /* DLC:2 Byte0:ExecFrontLight_t Byte1:brightness */
+#define CAN_ID_EXEC_FRONT_WIPERS    0x201U  /* DLC:2 Byte0:CmdWiper_t Byte1:spray */
+#define CAN_ID_EXEC_FRONT_TURN      0x202U  /* DLC:1 Byte0:ExecTurn_t bitmask */
+#define CAN_ID_EXEC_REAR_TURN       0x210U  /* DLC:1 Byte0:ExecTurn_t bitmask */
+#define CAN_ID_EXEC_REAR_TRUNK      0x211U  /* DLC:1 Byte0:CmdTrunk_t */
+
+/* GROUP C: Central ECU -> Qt (Real-time Status) */
+#define CAN_ID_STATUS_VEHICLE_STATE 0x300U
+/* DLC:7 every 100ms
+ * Byte0: VehicleGear_t
+ * Byte1: VehicleStateFlags_t bitmask
+ * Byte2-3: Speed km/h big-endian uint16
+ * Byte4: Fuel 0-100%
+ * Byte5: Coolant temp ENCODE_TEMP()
+ * Byte6: Battery voltage ENCODE_VOLTAGE() */
+
+#define CAN_ID_STATUS_LIGHTS_STATE  0x301U
+/* DLC:2 on-change or every 500ms
+ * Byte0: LightStatusFlags_t bitmask
+ * Byte1: CmdWiper_t current wiper mode */
+
+#define CAN_ID_STATUS_TURN_BLINK    0x302U
+/* DLC:1 every 500ms in phase with BLINK_TICK
+ * Byte0: bit0=L_phase bit1=R_phase (1=LED ON) */
+
+#define CAN_ID_STATUS_TRUNK_STATE   0x303U
+/* DLC:2 every 200ms while moving, 1s when idle
+ * Byte0: open % 0-100%
+ * Byte1: TrunkMotorState_t */
+
+#define CAN_ID_STATUS_REVERSE_RADAR 0x304U
+/* DLC:4 every 100ms in GEAR_REVERSE
+ * Byte0-1: distance cm PACK_U16 (0xFFFF=no object)
+ * Byte2: ParkingLevel_t
+ * Byte3: 0x00 reserved */
+
+#define CAN_ID_STATUS_DIAG_RESPONSE 0x305U
+/* DLC:8 multi-frame response
+ * Byte0: DiagCmd_t echoed
+ * Byte1: frame index (0=first)
+ * Byte2: total frames
+ * Byte3-7: payload (DTC codes, counters, values) */
+
+/* GROUP D: BCMs -> Central ECU (Status + Sensor Reports) */
+#define CAN_ID_REPORT_FRONT_STATUS  0x400U
+/* DLC:3 every 200ms
+ * Byte0: FrontActuatorFlags_t
+ * Byte1: CmdWiper_t current mode
+ * Byte2: wiper motor health 0-100% */
+
+#define CAN_ID_REPORT_FRONT_SENSORS 0x401U
+/* DLC:2 every 500ms
+ * Byte0: ambient light 0-100%
+ * Byte1: washer fluid 0-100% */
+
+#define CAN_ID_REPORT_REAR_STATUS   0x410U
+/* DLC:3 every 200ms
+ * Byte0: RearActuatorFlags_t
+ * Byte1: TrunkMotorState_t
+ * Byte2: trunk open % 0-100% */
+
+#define CAN_ID_REPORT_REAR_SENSORS  0x411U
+/* DLC:4 every 100ms
+ * Byte0-1: HC-SR04 distance cm PACK_U16 (0xFFFF=no object)
+ * Byte2: trunk hall-effect (0=CLOSED 1=OPEN)
+ * Byte3: ParkingLevel_t */
+
+/* GROUP E: BCMs -> Central ECU (Fault / DTC Reports) */
+#define CAN_ID_FAULT_FRONT_BCM      0x500U
+/* DLC:5
+ * Byte0: DTC_Severity_t
+ * Byte1-2: DTC code big-endian uint16
+ * Byte3: occurrence counter (wraps 255)
+ * Byte4: SimpleErrorCode_t */
+
+#define CAN_ID_FAULT_REAR_BCM       0x510U  /* DLC:5 same layout */
+
+/* GROUP F: Central ECU -> Qt (Banner Display + Diagnostic Events) */
+#define CAN_ID_BANNER_FAULT         0x600U
+/* DLC:6 sent immediately after Central ECU processes a fault
+ * Byte0: NODE_ID_* source
+ * Byte1: DTC_Severity_t -> Qt banner colour (INFO=blue WARN=yellow ERR=red CRIT=flashing)
+ * Byte2-3: DTC code big-endian uint16
+ * Byte4: occurrence counter
+ * Byte5: SimpleErrorCode_t */
+
+#define CAN_ID_BANNER_CLEAR         0x601U
+/* DLC:2 fault resolved, Qt dismisses banner
+ * Byte0-1: DTC code (0x0000=clear ALL) */
+
+#define CAN_ID_WATCHDOG_ALERT       0x610U
+/* DLC:2 node stopped heartbeating
+ * Byte0: NODE_ID_* silent node
+ * Byte1: seconds since last heartbeat */
+
+/* GROUP G: Heartbeat & Sync */
+#define CAN_ID_HEARTBEAT_CENTRAL    0x700U  /* DLC:2 every 100ms Byte0:counter Byte1:HeartbeatFlags_t */
+#define CAN_ID_HEARTBEAT_FRONT_BCM  0x710U  /* DLC:2 same layout */
+#define CAN_ID_HEARTBEAT_REAR_BCM   0x720U  /* DLC:2 same layout */
+
+#define CAN_ID_BLINK_TICK           0x130U
+/* Central ECU -> All BCMs every 500ms
+ * BCMs toggle armed turn-signal GPIO on receipt -> perfect sync
+ * DLC:1 Byte0:0x01 */
 
 
-// ==============================================================================
-// 1. CAN MESSAGE IDs - ORGANIZED BY DIRECTION & PURPOSE
-// ==============================================================================
+/* ============================================================================
+ * SECTION 3: COMMAND PAYLOAD ENUMS
+ * ============================================================================ */
 
-// ========== GROUP A: Qt -> Central ECU (User Commands/Requests) ==========
-// DLC: Variable (1-8 bytes per message)
-// Priority: HIGH (processed immediately, validated for conflicts)
+typedef enum {
+    CMD_LIGHT_OFF           = 0x00,
+    CMD_LIGHT_DRL_ON        = 0x01,
+    CMD_LIGHT_HEADLIGHT_LOW = 0x02,
+    CMD_LIGHT_HEADLIGHT_HIGH= 0x03,
+    CMD_LIGHT_FOG_ON        = 0x04,
+    CMD_LIGHT_FOG_OFF       = 0x05,
+    CMD_LIGHT_AUTO_MODE     = 0x06
+} CmdLight_t;
 
-#define CAN_ID_CMD_LIGHT_CONTROL    0x100  // Headlight, DRL, fog light commands
-#define CAN_ID_CMD_WIPER_CONTROL    0x101  // Wiper speed, washer spray commands
-#define CAN_ID_CMD_TURN_SIGNAL      0x102  // Left/Right turn signal requests
-#define CAN_ID_CMD_TRUNK_CONTROL    0x103  // Trunk open/close requests (state-dependent)
-#define CAN_ID_CMD_DIAGNOSTIC       0x104  // Diagnostic mode enable, clear faults, etc.
+typedef enum {
+    CMD_WIPER_OFF           = 0x00,
+    CMD_WIPER_INTERMITTENT  = 0x01,
+    CMD_WIPER_SLOW          = 0x02,
+    CMD_WIPER_NORMAL        = 0x03,
+    CMD_WIPER_FAST          = 0x04,
+    CMD_WIPER_AUTO          = 0x05
+} CmdWiper_t;
 
+typedef enum {
+    CMD_TURN_OFF            = 0x00,
+    CMD_TURN_LEFT           = 0x01,
+    CMD_TURN_RIGHT          = 0x02,
+    CMD_TURN_HAZARD         = 0x03
+} CmdTurn_t;
 
-// ========== GROUP B: Central ECU -> BCMs (Approved Commands) ==========
-// Only APPROVED commands reach BCMs
-// DLC: 1-2 bytes per message
+typedef enum {
+    CMD_TRUNK_NO_ACTION     = 0x00,
+    CMD_TRUNK_OPEN          = 0x01,
+    CMD_TRUNK_CLOSE         = 0x02,
+    CMD_TRUNK_STOP          = 0x03
+} CmdTrunk_t;
 
-#define CAN_ID_EXEC_FRONT_LIGHTS    0x200  // Central ECU -> Front BCM: Execute light commands
-#define CAN_ID_EXEC_FRONT_WIPERS    0x201  // Central ECU -> Front BCM: Execute wiper commands
-#define CAN_ID_EXEC_REAR_LIGHTS     0x210  // Central ECU -> Rear BCM: Execute turn signals
-#define CAN_ID_EXEC_REAR_TRUNK      0x211  // Central ECU -> Rear BCM: Execute trunk control
+typedef enum {
+    DIAG_CMD_READ_ALL_DTCS      = 0x01,
+    DIAG_CMD_READ_DTC_COUNT     = 0x02,
+    DIAG_CMD_CLEAR_ALL_DTCS     = 0x03,
+    DIAG_CMD_READ_FREEZE_FRAME  = 0x04,
+    DIAG_CMD_READ_LIVE_DATA     = 0x05,
+    DIAG_CMD_ECU_RESET          = 0x06,
+    DIAG_CMD_NODE_STATUS        = 0x07
+} DiagCmd_t;
 
+typedef enum {
+    ACK_STATUS_APPROVED     = 0x00,
+    ACK_STATUS_REJECTED     = 0x01,
+    ACK_STATUS_PENDING      = 0x02
+} AckStatus_t;
 
-// ========== GROUP C: Central ECU -> Qt (Real-Time Status/Sensor Updates) ==========
-// Continuous or event-triggered updates
-// DLC: 1-8 bytes per message
-// Used for HMI updates, gauges, status indicators
-
-#define CAN_ID_STATUS_VEHICLE_STATE 0x300  // Speed, RPM, Gear, Temp, Battery voltage
-#define CAN_ID_STATUS_LIGHTS_STATE  0x301  // Current light states (HLs, DRL, fog, etc.)
-#define CAN_ID_STATUS_WIPERS_STATE  0x302  // Current wiper speed, washer level
-#define CAN_ID_STATUS_TRUNK_STATE   0x303  // Trunk position (0-100%), motor state
-#define CAN_ID_STATUS_DOORS_LOCKS   0x304  // Door/window/lock states (for future expansion)
-#define CAN_ID_STATUS_CLIMATE       0x305  // A/C, heating, seat warmers (future)
-
-
-// ========== GROUP D: BCMs -> Central ECU (Status Reports & Feedback) ==========
-// Status from actuators, sensor readings, operational state
-// DLC: 1-8 bytes per message
-
-#define CAN_ID_REPORT_FRONT_STATUS  0x400  // Front BCM status: Light actuators, wiper state
-#define CAN_ID_REPORT_FRONT_SENSORS 0x401  // Front BCM sensors: Rain detect, light intensity
-#define CAN_ID_REPORT_REAR_STATUS   0x410  // Rear BCM status: Light actuators, trunk motor
-#define CAN_ID_REPORT_REAR_SENSORS  0x411  // Rear BCM sensors: Distance (HC-SR04), trunk hall
-
-
-// ========== GROUP E: Errors & Diagnostics ==========
-// Real-time error reporting (OBD-style DTC codes)
-// Sent immediately when faults occur, or periodically for monitoring
-// DLC: 2-8 bytes per message
-
-#define CAN_ID_ERROR_CENTRAL_ECU    0x500  // Central ECU diagnostics (power, comms, logic)
-#define CAN_ID_ERROR_FRONT_BCM      0x510  // Front BCM faults (relay, LED, wiper motor)
-#define CAN_ID_ERROR_REAR_BCM       0x520  // Rear BCM faults (relay, motor, sensor)
-#define CAN_ID_DIAG_REQUEST         0x530  // Qt -> Central ECU: Request diagnostic data
-#define CAN_ID_DIAG_RESPONSE        0x531  // Central ECU -> Qt: Diagnostic data (DTC list, counters)
-
-
-// ========== GROUP F: Heartbeat & Sync ==========
-// Ensure all nodes are alive and synchronized
-// DLC: 1-2 bytes per message
-// Interval: 100ms or 500ms
-
-#define CAN_ID_HEARTBEAT_CENTRAL    0x600  // Central ECU alive pulse (100ms)
-#define CAN_ID_HEARTBEAT_FRONT_BCM  0x610  // Front BCM alive pulse (100ms)
-#define CAN_ID_HEARTBEAT_REAR_BCM   0x620  // Rear BCM alive pulse (100ms)
-
-// Blink Tick: Central ECU -> All BCMs (every 500ms)
-// Synchronises turn-signal toggling across Front BCM and Rear BCM.
-// On each tick, armed BCMs toggle their respective turn-signal outputs.
-// DLC: 1, Byte 0: 0x01
-#define CAN_ID_BLINK_TICK           0x130
+/* EXEC bitmasks */
+#define EXEC_FRONT_DRL          (1U << 0)
+#define EXEC_FRONT_HEADLIGHT    (1U << 1)
+#define EXEC_FRONT_HIGH_BEAM    (1U << 2)
+#define EXEC_FRONT_FOG          (1U << 3)
+#define EXEC_TURN_LEFT_ARM      (1U << 0)
+#define EXEC_TURN_RIGHT_ARM     (1U << 1)
+#define EXEC_TURN_HAZARD_ARM    (1U << 2)
 
 
-// ==============================================================================
-// 2. COMMAND PAYLOADS & BITMASKS
-// ==============================================================================
+/* ============================================================================
+ * SECTION 4: VEHICLE STATE FLAGS & STATUS PAYLOADS
+ * ============================================================================ */
 
-// ========== CAN_ID_CMD_LIGHT_CONTROL (Qt -> Central ECU) ==========
-// Byte 0: Light Control Bitmask
-#define CMD_LIGHT_HEADLIGHT_ON      (1 << 0)  // 0x01 - Main headlights
-#define CMD_LIGHT_HEADLIGHT_OFF     (1 << 1)  // 0x02 - Turn off headlights
-#define CMD_LIGHT_DRL_ON            (1 << 2)  // 0x04 - Daytime Running Lights
-#define CMD_LIGHT_DRL_OFF           (1 << 3)  // 0x08
-#define CMD_LIGHT_FOG_ON            (1 << 4)  // 0x10 - Fog lights
-#define CMD_LIGHT_FOG_OFF           (1 << 5)  // 0x20
-#define CMD_LIGHT_AUTO_MODE         (1 << 6)  // 0x40 - Auto mode (sensor-driven)
-// Byte 1: Brightness (0-100%) if applicable
-
-// ========== CAN_ID_CMD_WIPER_CONTROL (Qt -> Central ECU) ==========
-// Byte 0: Wiper Mode
-#define CMD_WIPER_OFF               0x00
-#define CMD_WIPER_INTERMITTENT      0x01
-#define CMD_WIPER_SLOW              0x02
-#define CMD_WIPER_NORMAL            0x03
-#define CMD_WIPER_FAST              0x04
-#define CMD_WIPER_AUTO              0x05  // Rain sensor driven
-// Byte 1: Washer trigger (0x01 = spray)
-
-// ========== CAN_ID_CMD_TURN_SIGNAL (Qt -> Central ECU) ==========
-// Byte 0: Turn Signal Command
-#define CMD_TURN_OFF                0x00
-#define CMD_TURN_LEFT               0x01
-#define CMD_TURN_RIGHT              0x02
-#define CMD_TURN_HAZARD             0x03
-
-// ========== CAN_ID_CMD_TRUNK_CONTROL (Qt -> Central ECU) ==========
-// Byte 0: Trunk Command
-#define CMD_TRUNK_NO_ACTION         0x00
-#define CMD_TRUNK_OPEN              0x01
-#define CMD_TRUNK_CLOSE             0x02
-#define CMD_TRUNK_STOP              0x03  // Emergency stop
-// Byte 1: Reserved for future (unlock code, security check, etc.)
-
-
-// ==============================================================================
-// 3. VEHICLE STATE ENUMS & CONTEXT FLAGS
-// ==============================================================================
-
-// Vehicle Gear/Mode (from sensors, used for validation logic)
 typedef enum {
     GEAR_PARK       = 0x00,
     GEAR_REVERSE    = 0x01,
@@ -162,281 +249,173 @@ typedef enum {
     GEAR_UNKNOWN    = 0xFF
 } VehicleGear_t;
 
-// Vehicle State Flags (CAN_ID_STATUS_VEHICLE_STATE byte 1)
-#define STATE_ENGINE_RUNNING        (1 << 0)  // 0x01
-#define STATE_VEHICLE_MOVING        (1 << 1)  // 0x02 - Speed > threshold
-#define STATE_DOORS_LOCKED          (1 << 2)  // 0x04
-#define STATE_SEATBELTS_FASTENED    (1 << 3)  // 0x08
-#define STATE_HAZARD_LIGHTS_ON      (1 << 4)  // 0x10
-#define STATE_PARK_BRAKE_ON         (1 << 5)  // 0x20
-#define STATE_TRUNK_AJAR            (1 << 6)  // 0x40
+/* STATUS_VEHICLE_STATE Byte1 */
+#define STATE_ENGINE_RUNNING    (1U << 0)
+#define STATE_VEHICLE_MOVING    (1U << 1)  /* speed > 5 km/h */
+#define STATE_PARK_BRAKE_ON     (1U << 2)
+#define STATE_SEATBELT_OK       (1U << 3)
+#define STATE_TRUNK_AJAR        (1U << 4)
+#define STATE_DTC_ACTIVE        (1U << 5)
+#define STATE_HAZARD_ACTIVE     (1U << 6)
+#define STATE_REVERSE_ACTIVE    (1U << 7)
 
+/* STATUS_LIGHTS_STATE Byte0 */
+#define STATUS_DRL_ON           (1U << 0)
+#define STATUS_HEADLIGHT_ON     (1U << 1)
+#define STATUS_HIGH_BEAM_ON     (1U << 2)
+#define STATUS_FOG_ON           (1U << 3)
+#define STATUS_TURN_LEFT_ON     (1U << 4)
+#define STATUS_TURN_RIGHT_ON    (1U << 5)
+#define STATUS_HAZARD_ON        (1U << 6)
+#define STATUS_BRAKE_ON         (1U << 7)
 
-// ==============================================================================
-// 4. REAL-TIME STATUS PAYLOADS
-// ==============================================================================
-
-// ========== CAN_ID_STATUS_VEHICLE_STATE (Central ECU -> Qt) ==========
-// Byte 0: Vehicle Gear (VehicleGear_t)
-// Byte 1: Vehicle State Flags
-// Byte 2-3: Speed (uint16, km/h)
-// Byte 4: RPM (uint8, 0-100% of max)
-// Byte 5: Coolant Temp (int8, -40 to +125°C, offset by 40)
-// Byte 6: Battery Voltage (uint8, 8-16V encoded as 0-255)
-
-// ========== CAN_ID_STATUS_LIGHTS_STATE (Central ECU -> Qt) ==========
-// Byte 0: Light Status Bitmask
-#define STATUS_HL_ACTIVE            (1 << 0)  // Headlights ON
-#define STATUS_DRL_ACTIVE           (1 << 1)  // DRL ON
-#define STATUS_FOG_ACTIVE           (1 << 2)  // Fog lights ON
-#define STATUS_TURN_LEFT_ACTIVE     (1 << 3)  // Left turn blinking
-#define STATUS_TURN_RIGHT_ACTIVE    (1 << 4)  // Right turn blinking
-#define STATUS_HAZARD_ACTIVE        (1 << 5)  // Hazard blinking
-#define STATUS_BRAKE_LIGHTS_ACTIVE  (1 << 6)  // Brake lights ON
-// Byte 1: Reserved
-
-// ========== CAN_ID_STATUS_WIPERS_STATE (Central ECU -> Qt) ==========
-// Byte 0: Current Wiper Mode (CMD_WIPER_* values)
-// Byte 1: Washer Fluid Level (0-100%)
-// Byte 2: Wiper Motor Health (0-100%, 0=error, 100=healthy)
-
-// ========== CAN_ID_STATUS_TRUNK_STATE (Central ECU -> Qt) ==========
-// Byte 0: Trunk Position (0-100%, 0=closed, 100=fully open)
-// Byte 1: Trunk Motor State
-#define TRUNK_STATE_IDLE            0x00
-#define TRUNK_STATE_OPENING         0x01
-#define TRUNK_STATE_CLOSING         0x02
-#define TRUNK_STATE_STALLED         0x03  // Motor error/stall
-#define TRUNK_STATE_UNKNOWN         0xFF
-
-
-// ==============================================================================
-// 5. ERROR CODES & DTC (Diagnostic Trouble Codes) - OBD-STYLE
-// ==============================================================================
-
-// Power Train Codes (P-series: 0x0000-0x0FFF)
 typedef enum {
-    DTC_P0000 = 0x0000,  // No errors
-    DTC_P0101 = 0x0101,  // Mass Air Flow (MAF) sensor malfunction
-    DTC_P0201 = 0x0201,  // Fuel Injector Circuit (Cylinder 1)
-    DTC_P0301 = 0x0301,  // Cylinder 1 Misfire
-    // ... extend as needed
-} PowerTrainDTC_t;
+    TRUNK_IDLE      = 0x00,
+    TRUNK_OPENING   = 0x01,
+    TRUNK_CLOSING   = 0x02,
+    TRUNK_STALLED   = 0x03,
+    TRUNK_UNKNOWN   = 0xFF
+} TrunkMotorState_t;
 
-// Body/Chassis Codes (B-series: 0x1000-0x1FFF)
-typedef enum {
-    DTC_B1000 = 0x1000,  // No body errors
-    DTC_B1001 = 0x1001,  // Headlight circuit fault (left)
-    DTC_B1002 = 0x1002,  // Headlight circuit fault (right)
-    DTC_B1010 = 0x1010,  // Wiper motor stall/jam
-    DTC_B1011 = 0x1011,  // Wiper position sensor fault
-    DTC_B1020 = 0x1020,  // Trunk motor stall
-    DTC_B1021 = 0x1021,  // Trunk position sensor fault (ultrasonic)
-    DTC_B1030 = 0x1030,  // Turn signal relay fault (left)
-    DTC_B1031 = 0x1031,  // Turn signal relay fault (right)
-    DTC_B1040 = 0x1040,  // Rear fog light circuit fault
-    DTC_B1050 = 0x1050,  // Door lock actuator fault
-} BodyDTC_t;
+/* REPORT_FRONT_STATUS Byte0 */
+#define FRONT_ACT_DRL           (1U << 0)
+#define FRONT_ACT_HEADLIGHT     (1U << 1)
+#define FRONT_ACT_FOG           (1U << 2)
+#define FRONT_ACT_WIPER         (1U << 3)
+#define FRONT_ACT_WASHER        (1U << 4)
+#define FRONT_ACT_LTURN         (1U << 5)
+#define FRONT_ACT_RTURN         (1U << 6)
 
-// Network/Communication Codes (C-series: 0x2000-0x2FFF)
-typedef enum {
-    DTC_C0000 = 0x2000,  // No network errors
-    DTC_C1001 = 0x2001,  // CAN bus off
-    DTC_C1002 = 0x2002,  // CAN timeout (Front BCM not responding)
-    DTC_C1003 = 0x2003,  // CAN timeout (Rear BCM not responding)
-    DTC_C1004 = 0x2004,  // CAN timeout (Qt not responding)
-    DTC_C1010 = 0x2010,  // ECU internal communication fault
-    DTC_C1020 = 0x2020,  // BCM internal communication fault
-} NetworkDTC_t;
+/* REPORT_REAR_STATUS Byte0 */
+#define REAR_ACT_BRAKE          (1U << 0)
+#define REAR_ACT_LTURN          (1U << 1)
+#define REAR_ACT_RTURN          (1U << 2)
+#define REAR_ACT_TRUNK_ACTIVE   (1U << 3)
 
-// Severity Levels for Error Display
+/* HEARTBEAT Byte1 */
+#define HB_INIT_OK              (1U << 0)
+#define HB_CAN_OK               (1U << 1)
+#define HB_SENSORS_OK           (1U << 2)
+#define HB_DTC_ACTIVE           (1U << 3)
+
 typedef enum {
-    DTC_SEVERITY_INFO       = 0x00,  // Informational (no banner)
-    DTC_SEVERITY_WARNING    = 0x01,  // Yellow banner
-    DTC_SEVERITY_ERROR      = 0x02,  // Red banner
-    DTC_SEVERITY_CRITICAL   = 0x03   // Red flashing banner + audible alert
+    PARKING_CLEAR    = 0x00,  /* > 100 cm */
+    PARKING_CAUTION  = 0x01,  /* 61-100 cm - yellow */
+    PARKING_WARNING  = 0x02,  /* 31-60 cm  - orange */
+    PARKING_CRITICAL = 0x03   /* 0-30 cm   - red + audio */
+} ParkingLevel_t;
+
+#define DIST_THRESHOLD_CAUTION_CM   100U
+#define DIST_THRESHOLD_WARNING_CM    60U
+#define DIST_THRESHOLD_CRITICAL_CM   30U
+#define DIST_MAX_RANGE_CM           400U
+#define DIST_NO_OBJECT             0xFFFFU
+
+
+/* ============================================================================
+ * SECTION 5: OBD-STYLE DTC FAULT CODES
+ * ============================================================================ */
+
+typedef enum {
+    DTC_SEVERITY_INFO     = 0x00,  /* Blue banner   */
+    DTC_SEVERITY_WARNING  = 0x01,  /* Yellow banner */
+    DTC_SEVERITY_ERROR    = 0x02,  /* Red banner    */
+    DTC_SEVERITY_CRITICAL = 0x03   /* Flashing red + audio */
 } DTC_Severity_t;
 
-
-// ==============================================================================
-// 6. ERROR REPORT STRUCTURE (CAN_ID_ERROR_*) - EXTENDED DIAGNOSTICS
-// ==============================================================================
-
-// Byte 0: Severity Level (DTC_Severity_t)
-// Byte 1-2: DTC Code (uint16, BodyDTC_t / NetworkDTC_t / PowerTrainDTC_t)
-// Byte 3: Error Counter (how many times occurred since boot)
-// Byte 4: Timestamp/Frame (can be used for trending)
-// Byte 5-7: Additional context (e.g., which actuator, voltage reading, etc.)
-
-
-// ==============================================================================
-// 7. DIAGNOSTIC REQUEST/RESPONSE STRUCTURE
-// ==============================================================================
-
-// CAN_ID_DIAG_REQUEST (Qt -> Central ECU)
-// Byte 0: Diagnostic Command
-#define DIAG_CMD_READ_DTCS         0x01  // Read all active DTCs
-#define DIAG_CMD_READ_DTC_COUNT    0x02  // Get count of DTCs
-#define DIAG_CMD_CLEAR_DTCS        0x03  // Clear all DTCs (with password)
-#define DIAG_CMD_READ_FREEZE_FRAME 0x04  // Read snapshot at error moment
-#define DIAG_CMD_READ_LIVE_DATA    0x05  // Get real-time sensor data
-// Byte 1-7: Optional parameters (e.g., password for clear)
-
-// CAN_ID_DIAG_RESPONSE (Central ECU -> Qt)
-// Multi-frame response (segmented for large data)
-// Byte 0: Response Type (mirrors DIAG_CMD_*)
-// Byte 1: Total Frames / Frame Index
-// Byte 2-7: Payload (DTC codes, counts, sensor values, etc.)
-
-
-// ==============================================================================
-// 8. STATE VALIDATION & APPROVAL RULES (Central ECU Logic)
-// ==============================================================================
-// These are NOT transmitted but implemented in Central ECU firmware
-// Used to make approve/reject decisions
-
-// Rule: Trunk can only open if:
-//   - Vehicle is in PARK or NEUTRAL
-//   - Vehicle speed <= 5 km/h (stationary)
-//   - Engine is running (for powered trunk)
-//   - No existing trunk error (DTC_B1020, DTC_B1021)
-//   - Doors are locked (security)
-
-// Rule: Wipers can't operate if:
-//   - No wiper motor health (DTC_B1010, DTC_B1011)
-//   - Washer fluid too low (threshold)
-
-// Rule: Lights can be toggled anytime, but:
-//   - Auto mode respects ambient light sensor
-//   - High beams flash restricted if on high speed
-//   - All light actuators checked for faults (DTC_B1001-B1002)
-
-
-// ==============================================================================
-// 9. COMMAND APPROVAL/REJECTION RESPONSE (Central ECU -> Qt)
-// ==============================================================================
-// Not a separate CAN ID; uses existing status messages
-// Qt polls STATUS messages to see if command was accepted
-// Or immediate NACK via ERROR message if validation failed
-
-// Implicit NACK: Error code issued immediately
-// Implicit ACK: Status message updates within 100ms of command
-
-
-// ==============================================================================
-// 10. HELPER MACROS
-// ==============================================================================
-
-// Combine two bytes into a 16-bit unsigned integer
-#define PACK_U16(high, low)         ((uint16_t)(((uint16_t)(high) << 8) | (low)))
-
-// Extract bytes from a 16-bit integer
-#define UNPACK_HIGH_BYTE(val)       ((uint8_t)(((uint16_t)(val) >> 8) & 0xFF))
-#define UNPACK_LOW_BYTE(val)        ((uint8_t)((uint16_t)(val) & 0xFF))
-
-// Temperature encoding (offset by 40°C to support -40 to +125°C)
-#define ENCODE_TEMP(celsius)        ((uint8_t)((celsius) + 40))
-#define DECODE_TEMP(encoded)        ((int8_t)(encoded) - 40)
-
-// Battery voltage encoding (scale 8-16V to 0-255)
-#define ENCODE_VOLTAGE(volts)       ((uint8_t)(((volts) - 8.0) * 31.875))  // 255/8
-#define DECODE_VOLTAGE(encoded)     (8.0 + ((encoded) / 31.875))
-
-// Speed encoding (uint16 in km/h)
-#define ENCODE_SPEED(kmh)           ((uint16_t)(kmh))
-#define DECODE_SPEED(encoded)       ((uint16_t)(encoded))
-
-
-// ==============================================================================
-// 11. COMMAND VALIDATION RESULT CODES
-// ==============================================================================
-// Sent back in error message if command rejected
 typedef enum {
-    VALIDATION_OK               = 0x00,  // Command approved
-    VALIDATION_ERR_INVALID_CMD  = 0x01,  // Unknown command
-    VALIDATION_ERR_BAD_STATE    = 0x02,  // Vehicle state prevents action
-    VALIDATION_ERR_SPEED        = 0x03,  // Vehicle moving, can't execute
-    VALIDATION_ERR_GEAR         = 0x04,  // Wrong gear (e.g., not in PARK)
-    VALIDATION_ERR_FAULT        = 0x05,  // Relevant actuator has fault
-    VALIDATION_ERR_SAFETY       = 0x06,  // Safety lock (e.g., doors not locked)
-    VALIDATION_ERR_TIMEOUT      = 0x07,  // BCM didn't respond to execution
-    VALIDATION_ERR_RESOURCE     = 0x08   // Resource busy (e.g., trunk already moving)
+    DTC_B0000 = 0x1000, /* No body fault                   */
+    DTC_B1001 = 0x1001, /* Headlight open circuit (left)   */
+    DTC_B1002 = 0x1002, /* Headlight open circuit (right)  */
+    DTC_B1003 = 0x1003, /* DRL circuit fault               */
+    DTC_B1004 = 0x1004, /* Fog light circuit fault         */
+    DTC_B1010 = 0x1010, /* Wiper motor stall / jam         */
+    DTC_B1011 = 0x1011, /* Wiper position sensor fault     */
+    DTC_B1012 = 0x1012, /* Washer fluid critically low     */
+    DTC_B1020 = 0x1020, /* Trunk motor stall               */
+    DTC_B1021 = 0x1021, /* Trunk hall sensor fault         */
+    DTC_B1022 = 0x1022, /* Trunk open timeout (>5s)        */
+    DTC_B1030 = 0x1030, /* Turn signal relay fault (left)  */
+    DTC_B1031 = 0x1031, /* Turn signal relay fault (right) */
+    DTC_B1040 = 0x1040, /* HC-SR04 ultrasonic read fail    */
+    DTC_B1041 = 0x1041, /* Reverse radar out of range      */
+    DTC_B1050 = 0x1050, /* Brake light circuit fault       */
+} BodyDTC_t;
+
+typedef enum {
+    DTC_C0000 = 0x2000, /* No network fault                */
+    DTC_C1001 = 0x2001, /* CAN bus-off                     */
+    DTC_C1002 = 0x2002, /* Front BCM heartbeat timeout     */
+    DTC_C1003 = 0x2003, /* Rear BCM heartbeat timeout      */
+    DTC_C1004 = 0x2004, /* Translator/Qt link lost         */
+    DTC_C1010 = 0x2010, /* CAN TX error counter overflow   */
+    DTC_C1011 = 0x2011, /* CAN RX FIFO overflow            */
+} NetworkDTC_t;
+
+
+/* ============================================================================
+ * SECTION 6: VALIDATION RULES & RESULT CODES (Central ECU state machine)
+ *
+ * TRUNK OPEN requires: gear==PARK/NEUTRAL, speed<=5km/h,
+ *                      no active DTC_B1020/B1021, trunk idle
+ * HIGH BEAM requires:  headlight already ON, speed<140km/h
+ * HAZARD: always permitted regardless of gear or speed
+ * ============================================================================ */
+
+typedef enum {
+    VALIDATION_OK                = 0x00,
+    VALIDATION_ERR_BAD_GEAR      = 0x01,
+    VALIDATION_ERR_SPEED         = 0x02,
+    VALIDATION_ERR_DTC_ACTIVE    = 0x03,
+    VALIDATION_ERR_RESOURCE_BUSY = 0x04,
+    VALIDATION_ERR_UNKNOWN_CMD   = 0x05,
+    VALIDATION_ERR_SAFETY_LOCK   = 0x06,
+    VALIDATION_ERR_BCM_OFFLINE   = 0x07,
 } ValidationResult_t;
+
+
+/* ============================================================================
+ * SECTION 7: COMPACT ERROR CODES (Byte4 of fault messages)
+ * ============================================================================ */
+
+typedef enum {
+    ERR_NONE             = 0x00,  /* No fault            -> DTC_B0000    */
+    ERR_OPEN_CIRCUIT     = 0x01,  /* Open circuit        -> DTC_B1001-04 */
+    ERR_SENSOR_FAULT     = 0x02,  /* Sensor read fail    -> DTC_B1021    */
+    ERR_NODE_TIMEOUT     = 0x03,  /* Heartbeat lost      -> DTC_C1002-03 */
+    ERR_OVERCURRENT      = 0x04,  /* Motor overcurrent   -> DTC_B1020    */
+    ERR_ACTUATOR_STALL   = 0x05,  /* Servo/motor stall   -> DTC_B1020    */
+    ERR_WIPER_STALL      = 0x06,  /* Wiper jam           -> DTC_B1010    */
+    ERR_RADAR_FAIL       = 0x07,  /* HC-SR04 fail        -> DTC_B1040    */
+    ERR_TRUNK_TIMEOUT    = 0x08,  /* Trunk open timeout  -> DTC_B1022    */
+    ERR_CAN_BUS_OFF      = 0x09,  /* CAN bus-off         -> DTC_C1001    */
+} SimpleErrorCode_t;
+
+
+/* ============================================================================
+ * SECTION 8: HELPER MACROS
+ * ============================================================================ */
+
+#define PACK_U16(hi, lo)         ((uint16_t)(((uint16_t)(hi) << 8U) | (uint8_t)(lo)))
+#define UNPACK_HIGH_BYTE(val)    ((uint8_t)(((uint16_t)(val) >> 8U) & 0xFFU))
+#define UNPACK_LOW_BYTE(val)     ((uint8_t)((uint16_t)(val) & 0xFFU))
+
+#define ENCODE_TEMP(c)           ((uint8_t)((int16_t)(c) + 40))
+#define DECODE_TEMP(raw)         ((int8_t)(raw) - 40)
+
+#define ENCODE_VOLTAGE(v)        ((uint8_t)(((float)(v) - 8.0f) * 31.875f))
+#define DECODE_VOLTAGE(raw)      (8.0f + ((float)(raw) / 31.875f))
+
+#define ENCODE_SPEED(kmh)        ((uint16_t)(kmh))
+#define DECODE_SPEED(raw)        ((uint16_t)(raw))
+
+#define CALC_PARKING_LEVEL(cm) \
+    ((cm) <= DIST_THRESHOLD_CRITICAL_CM ? PARKING_CRITICAL : \
+     (cm) <= DIST_THRESHOLD_WARNING_CM  ? PARKING_WARNING  : \
+     (cm) <= DIST_THRESHOLD_CAUTION_CM  ? PARKING_CAUTION  : PARKING_CLEAR)
 
 
 #ifdef __cplusplus
 }
 #endif
-
-// ==============================================================================
-// 12. NODE IDENTIFIERS
-// ==============================================================================
-// Used in error messages (e.g., CAN_ID_ERROR_CENTRAL_ECU Byte 0) to identify
-// which node originated the fault report.
-
-#define NODE_ID_TRANSLATOR          0x00  // Blue Pill CAN-UART bridge
-#define NODE_ID_CENTRAL_ECU         0x01  // STM32F4-Discovery main ECU
-#define NODE_ID_FRONT_BCM           0x02  // Blue Pill front body controller
-#define NODE_ID_REAR_BCM            0x03  // Blue Pill rear body controller
-
-
-// ==============================================================================
-// 13. SIMPLE ERROR CODES (context field in CAN_ID_ERROR_* messages)
-// ==============================================================================
-// These map to the corresponding OBD DTC codes in Section 5.
-// Used in Byte 2 of error messages as a compact status indicator.
-
-typedef enum {
-    ERR_NONE                = 0x00,  // No fault                   -> DTC_P0000
-    ERR_ACTUATOR_FAULT      = 0x01,  // Relay or LED open circuit  -> DTC_B1001/B1002
-    ERR_SENSOR_READ         = 0x02,  // Ultrasonic / sensor fail   -> DTC_B1021
-    ERR_NODE_TIMEOUT        = 0x03,  // BCM heartbeat lost         -> DTC_C1002/C1003
-    ERR_OVERCURRENT         = 0x04,  // Motor current exceeded     -> DTC_B1020
-    ERR_ACTUATOR_STALL      = 0x05,  // Servo / trunk stall        -> DTC_B1020
-    ERR_WIPER_STALL         = 0x06,  // Wiper motor jammed         -> DTC_B1010
-    ERR_OPEN_CIRCUIT        = 0x07   // Headlight open circuit     -> DTC_B1001/B1002
-} SimpleErrorCode_t;
-
-
-// ==============================================================================
-// 14. SENSOR PAYLOAD DETAILS
-// ==============================================================================
-
-// ========== CAN_ID_REPORT_REAR_SENSORS (Rear BCM -> Central ECU) ==========
-// DLC: 4
-// Byte 0-1: HC-SR04 distance in centimetres (PACK_U16 big-endian, 0 = no object)
-// Byte 2:   Trunk hall-effect sensor state  (0 = CLOSED, 1 = OPEN)
-// Byte 3:   Parking proximity level         (ParkingLevel_t below)
-
-typedef enum {
-    PARKING_CLEAR           = 0x00,  // > 100 cm   — no alert
-    PARKING_CAUTION         = 0x01,  // 61-100 cm  — yellow indicator
-    PARKING_WARNING         = 0x02,  // 31-60 cm   — orange indicator
-    PARKING_CRITICAL        = 0x03   // 0-30 cm    — red + audio alert
-} ParkingLevel_t;
-
-// ========== CAN_ID_STATUS_VEHICLE_STATE speed field (Byte 2-3) ==========
-// Speed is packed as a big-endian uint16 in km/h (0-999).
-// Use ENCODE_SPEED / DECODE_SPEED macros for consistency.
-
-// ========== CAN_ID_HEARTBEAT_* payload ==========
-// DLC: 2
-// Byte 0: Node uptime counter (wraps at 255, increments each 100ms)
-// Byte 1: Node status flags
-#define HEARTBEAT_FLAG_INIT_OK      (1 << 0)  // 0x01 - Peripheral init successful
-#define HEARTBEAT_FLAG_CAN_OK       (1 << 1)  // 0x02 - CAN bus healthy
-#define HEARTBEAT_FLAG_SENSOR_OK    (1 << 2)  // 0x04 - All sensors reading valid
-#define HEARTBEAT_FLAG_ERROR_ACTIVE (1 << 3)  // 0x08 - At least one DTC active
-
-
-// ==============================================================================
-// 15. PROXIMITY DISTANCE THRESHOLDS (cm)
-// ==============================================================================
-
-#define DIST_THRESHOLD_CAUTION_CM   100U   // Below this -> PARKING_CAUTION
-#define DIST_THRESHOLD_WARNING_CM    60U   // Below this -> PARKING_WARNING
-#define DIST_THRESHOLD_CRITICAL_CM   30U   // Below this -> PARKING_CRITICAL
-#define DIST_MAX_RANGE_CM           400U   // HC-SR04 max reliable range
-#define DIST_NO_OBJECT              0xFFFFU // Sentinel: no object detected
-
-#endif // CAN_MESSAGES_H
+#endif /* CAN_MESSAGES_H */

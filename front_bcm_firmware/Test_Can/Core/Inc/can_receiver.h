@@ -10,6 +10,7 @@
 
 #include "stm32f1xx_hal.h"
 #include <stdint.h>
+#include "can_messages.h"
 
 void CAN_Receiver_Init(CAN_HandleTypeDef *hcan);
 

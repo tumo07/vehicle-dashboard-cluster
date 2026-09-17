@@ -49,8 +49,8 @@ void TurnSignal_Task(void){
 				currentTurnMode = Left;
 				flashState = 1;
 				lastFlashTime = currentTime ;
-				Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
 			}
+			Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
 		}
 		if (currentRightState == GPIO_PIN_RESET && lastRightBtnState == GPIO_PIN_SET	){
 			if(currentTurnMode == Right){
@@ -60,8 +60,8 @@ void TurnSignal_Task(void){
 				currentTurnMode = Right;
 				flashState = 1;
 				lastFlashTime = currentTime ;
-				Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
 			}
+			Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
 		}
 		if (currentHazardState == GPIO_PIN_RESET && lastHazardBtnState == GPIO_PIN_SET	){
 			if(currentTurnMode == Hazard){
@@ -71,8 +71,8 @@ void TurnSignal_Task(void){
 				currentTurnMode = Hazard;
 				flashState = 1;
 				lastFlashTime = currentTime ;
-				Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
 			}
+			Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
 		}
 
 		lastLeftBtnState	= currentLeftState	;

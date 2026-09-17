@@ -1,2 +1,2 @@
-../Core/Src/can_receiver.c:9:6:CAN_Receiver_Init	1
-../Core/Src/can_receiver.c:28:6:HAL_CAN_RxFifo0MsgPendingCallback	6
+../Core/Src/can_receiver.c:11:6:CAN_Receiver_Init	1
+../Core/Src/can_receiver.c:29:6:HAL_CAN_RxFifo0MsgPendingCallback	8

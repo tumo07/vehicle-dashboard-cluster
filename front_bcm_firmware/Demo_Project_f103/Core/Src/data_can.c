@@ -45,22 +45,19 @@ void CAN_Init_Filter_And_Start(CAN_HandleTypeDef *hcan) {
 
 void CAN_Send_Front_Command(CAN_HandleTypeDef *hcan, uint8_t wiperStatus, uint8_t turnStatus) {
     CAN_TxHeaderTypeDef TxHeader;
-    uint8_t txData[2] = {0}; // Sử dụng 2 byte dữ liệu
+    uint8_t txData[1] = {0};
     uint32_t pTxMailbox;
 
-    // Byte 0: Mã hóa riêng cho cấp độ gạt mưa (0 -> 4)
-    // 0: Off, 1: Int, 2: Low, 3: Hi, 4: Auto
-    txData[0] = wiperStatus;
-
-    // Byte 1: Mã hóa riêng cho xi-nhan / hazard (0 -> 3)
-    // 0: Off, 1: Left, 2: Right, 3: Hazard
-    txData[1] = turnStatus;
+    // --- CÔNG THỨC GHÉP BIT ---
+	// Wiper lấy 3 bit thấp (0-7): wiperMode & 0x07
+	// Turn lấy 2 bit tiếp theo (0-3): dịch trái 3 lần (turnMode & 0x03) << 3
+    txData[0] = (uint8_t)(((turnStatus & 0x03) << 3) | (wiperStatus & 0x07));
 
     TxHeader.StdId = CAN_ID_FRONT_CMD;
     TxHeader.ExtId = 0x00;
     TxHeader.RTR = CAN_RTR_DATA;
     TxHeader.IDE = CAN_ID_STD;
-    TxHeader.DLC = 2; // Đặt độ dài gói tin là 2 byte
+    TxHeader.DLC = 1;
     TxHeader.TransmitGlobalTime = DISABLE;
 
     last_can_status = HAL_CAN_AddTxMessage(hcan, &TxHeader, txData, &pTxMailbox);

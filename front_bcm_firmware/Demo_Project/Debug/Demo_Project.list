@@ -3451,7 +3451,7 @@ void TurnSignal_Task(void){
  800175c:	4b66      	ldr	r3, [pc, #408]	@ (80018f8 <TurnSignal_Task+0x220>)
  800175e:	2200      	movs	r2, #0
  8001760:	701a      	strb	r2, [r3, #0]
- 8001762:	e012      	b.n	800178a <TurnSignal_Task+0xb2>
+ 8001762:	e008      	b.n	8001776 <TurnSignal_Task+0x9e>
 			}
 			else{
 				currentTurnMode = Left;
@@ -3466,7 +3466,8 @@ void TurnSignal_Task(void){
  8001770:	4a63      	ldr	r2, [pc, #396]	@ (8001900 <TurnSignal_Task+0x228>)
  8001772:	68bb      	ldr	r3, [r7, #8]
  8001774:	6013      	str	r3, [r2, #0]
-				Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
+			}
+			Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
  8001776:	f7ff fbd3 	bl	8000f20 <Servo_GetWiperMode>
  800177a:	4603      	mov	r3, r0
  800177c:	461a      	mov	r2, r3
@@ -3475,7 +3476,6 @@ void TurnSignal_Task(void){
  8001782:	4619      	mov	r1, r3
  8001784:	4610      	mov	r0, r2
  8001786:	f7fe fed3 	bl	8000530 <Bridge_SendStatus>
-			}
 		}
 		if (currentRightState == GPIO_PIN_RESET && lastRightBtnState == GPIO_PIN_SET	){
  800178a:	79bb      	ldrb	r3, [r7, #6]
@@ -3494,7 +3494,7 @@ void TurnSignal_Task(void){
  80017a0:	4b55      	ldr	r3, [pc, #340]	@ (80018f8 <TurnSignal_Task+0x220>)
  80017a2:	2200      	movs	r2, #0
  80017a4:	701a      	strb	r2, [r3, #0]
- 80017a6:	e012      	b.n	80017ce <TurnSignal_Task+0xf6>
+ 80017a6:	e008      	b.n	80017ba <TurnSignal_Task+0xe2>
 			}
 			else{
 				currentTurnMode = Right;
@@ -3509,7 +3509,8 @@ void TurnSignal_Task(void){
  80017b4:	4a52      	ldr	r2, [pc, #328]	@ (8001900 <TurnSignal_Task+0x228>)
  80017b6:	68bb      	ldr	r3, [r7, #8]
  80017b8:	6013      	str	r3, [r2, #0]
-				Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
+			}
+			Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
  80017ba:	f7ff fbb1 	bl	8000f20 <Servo_GetWiperMode>
  80017be:	4603      	mov	r3, r0
  80017c0:	461a      	mov	r2, r3
@@ -3518,7 +3519,6 @@ void TurnSignal_Task(void){
  80017c6:	4619      	mov	r1, r3
  80017c8:	4610      	mov	r0, r2
  80017ca:	f7fe feb1 	bl	8000530 <Bridge_SendStatus>
-			}
 		}
 		if (currentHazardState == GPIO_PIN_RESET && lastHazardBtnState == GPIO_PIN_SET	){
  80017ce:	797b      	ldrb	r3, [r7, #5]
@@ -3537,7 +3537,7 @@ void TurnSignal_Task(void){
  80017e4:	4b44      	ldr	r3, [pc, #272]	@ (80018f8 <TurnSignal_Task+0x220>)
  80017e6:	2200      	movs	r2, #0
  80017e8:	701a      	strb	r2, [r3, #0]
- 80017ea:	e012      	b.n	8001812 <TurnSignal_Task+0x13a>
+ 80017ea:	e008      	b.n	80017fe <TurnSignal_Task+0x126>
 			}
 			else{
 				currentTurnMode = Hazard;
@@ -3552,7 +3552,8 @@ void TurnSignal_Task(void){
  80017f8:	4a41      	ldr	r2, [pc, #260]	@ (8001900 <TurnSignal_Task+0x228>)
  80017fa:	68bb      	ldr	r3, [r7, #8]
  80017fc:	6013      	str	r3, [r2, #0]
-				Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
+			}
+			Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
  80017fe:	f7ff fb8f 	bl	8000f20 <Servo_GetWiperMode>
  8001802:	4603      	mov	r3, r0
  8001804:	461a      	mov	r2, r3
@@ -3561,7 +3562,6 @@ void TurnSignal_Task(void){
  800180a:	4619      	mov	r1, r3
  800180c:	4610      	mov	r0, r2
  800180e:	f7fe fe8f 	bl	8000530 <Bridge_SendStatus>
-			}
 		}
 
 		lastLeftBtnState	= currentLeftState	;

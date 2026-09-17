@@ -1,0 +1,3 @@
+../Core/Src/data_uart.c:18:6:Bridge_Init	16	static
+../Core/Src/data_uart.c:25:6:Bridge_SendStatus	24	static
+../Core/Src/data_uart.c:36:6:HAL_UART_RxCpltCallback	24	static

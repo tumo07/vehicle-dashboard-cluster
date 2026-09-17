@@ -1,0 +1,3 @@
+../Core/Src/motor.c:15:13:Motor_SetPWM	16	static
+../Core/Src/motor.c:20:6:Motor_Wash_Init	8	static
+../Core/Src/motor.c:31:6:Motor_Wash_Task	24	static

@@ -14,10 +14,10 @@ extern "C" {
 // Group A: Main ECU -> Bus (Sensor Data, 100ms)
 #define CAN_ID_SPEED            0x100  // DLC: 2 (High byte, Low byte, uint16)
 #define CAN_ID_FUEL             0x101  // DLC: 1 (0-100%, uint8)
-#define CAN_ID_HEADLIGHT_STATE  0x102  // DLC: 1 (0x00=OFF, 0x01=ON)
+#define CAN_ID_HAZARD           0x102  // DLC: 1 (0x00=OFF, 0x01=ON)
 
 // Group B: Main ECU -> Bus (Sync Tick, 500ms)
-#define CAN_ID_BLINK_TICK       0x130  // DLC: 1 (0x01 = Sync pulse)
+#define CAN_ID_BLINK_TICK       0x130  // DLC: 1 (0x01 = Sync HAZARD
 
 // Group C & D: Qt (via Translator) -> BCMs (Commands)
 #define CAN_ID_FRONT_CMD        0x110  // DLC: 1 (Bitmask)
@@ -39,7 +39,7 @@ extern "C" {
 // ==============================================================================
 
 // Front Command Bitmask (CAN_ID_FRONT_CMD)
-#define CMD_FRONT_HEADLIGHT     (1 << 0)  // 0x01
+#define CMD_FRONT_HAZARD     (1 << 0)  // 0x01
 #define CMD_FRONT_WASHER        (1 << 1)  // 0x02
 #define CMD_FRONT_WIPER         (1 << 2)  // 0x04
 #define CMD_FRONT_L_TURN        (1 << 3)  // 0x08
@@ -64,7 +64,7 @@ typedef enum {
     ERR_OVERCURRENT         = 0x04,  // Motor current too high
     ERR_TRUNK_STALL         = 0x05,  // Servo position error
     ERR_WIPER_STALL         = 0x06,  // Wiper motor jammed
-    ERR_HEADLIGHT_OPEN      = 0x07   // Headlight open circuit
+    ERR_HAZARD              = 0x07   // Hazard open circuit
 } SystemErrorCode_t;
 
 // Node Identifiers for 0x700 Error Message

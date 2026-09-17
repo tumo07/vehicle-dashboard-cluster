@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 void F103_Bridge_Init(UART_HandleTypeDef *huart);
+
 extern volatile uint8_t f103_wiperStatus;
 extern volatile uint8_t f103_turnStatus;
 

@@ -1,2 +1,2 @@
-../Core/Src/can_receiver.c:11:6:CAN_Receiver_Init	56	static
-../Core/Src/can_receiver.c:29:6:HAL_CAN_RxFifo0MsgPendingCallback	56	static
+../Core/Src/can_receiver.c:13:6:CAN_Receiver_Init	56	static
+../Core/Src/can_receiver.c:31:6:HAL_CAN_RxFifo0MsgPendingCallback	56	static

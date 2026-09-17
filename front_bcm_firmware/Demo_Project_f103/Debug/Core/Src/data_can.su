@@ -1,3 +1,4 @@
 ../Core/Src/data_can.c:20:6:CAN_Init_Filter_And_Start	56	static
-../Core/Src/data_can.c:46:6:CAN_Send_Front_Command	48	static
-../Core/Src/data_can.c:66:6:HAL_CAN_RxFifo0MsgPendingCallback	56	static
+../Core/Src/data_can.c:46:6:CAN_Send_Front_Status	56	static
+../Core/Src/data_can.c:86:6:CAN_Send_Front_Error	48	static
+../Core/Src/data_can.c:106:6:HAL_CAN_RxFifo0MsgPendingCallback	64	static

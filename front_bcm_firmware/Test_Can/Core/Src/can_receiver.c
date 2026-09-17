@@ -7,6 +7,8 @@ volatile uint8_t  rxed_data[8] = {0};
 volatile uint32_t rx_counter = 0;
 volatile uint8_t monitored_wiper = 0;
 volatile uint8_t monitored_turn  = 0;
+volatile uint8_t error_code_received = 0;
+volatile uint8_t error_device_mask = 0;
 
 void CAN_Receiver_Init(CAN_HandleTypeDef *hcan) {
     CAN_FilterTypeDef sFilterConfig;
@@ -31,30 +33,42 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
     if (hcan->Instance == CAN1) {
         CAN_RxHeaderTypeDef RxHeader;
         uint8_t temp_buf[8];
+
+        // Lấy dữ liệu từ FIFO0
         if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, temp_buf) == HAL_OK) {
+
+            // 1. Lưu trữ thông tin gói tin chung
             rxed_can_id = RxHeader.StdId;
             rxed_dlc    = RxHeader.DLC;
-            for(uint8_t i=0; i<rxed_dlc && i<8; i++) {
+            for(uint8_t i = 0; i < rxed_dlc && i < 8; i++) {
                 rxed_data[i] = temp_buf[i];
             }
             rx_counter++;
 
-            // --- SỬ DỤNG MACRO TỪ FILE can_messages.h ---
-			if (rxed_can_id == CAN_ID_FRONT_CMD && rxed_dlc == 1) {
-				uint8_t raw_value = rxed_data[0];
+            // 2. Giải mã chuẩn ID 0x200 (Front Status) do Blue Pill #1 gửi lên
+            if (rxed_can_id == CAN_ID_FRONT_STATUS && rxed_dlc == 2) {
+                uint8_t actuatorMask = rxed_data[0];
 
-				// Tách 3 bit thấp (0-7): Cấp độ gạt mưa
-				monitored_wiper = raw_value & 0x07;
+                // Tách trạng thái gạt mưa và xi-nhan
+                monitored_wiper = (actuatorMask & CMD_FRONT_WIPER) ? 1 : 0;
+                monitored_turn  = 0;
+                if (actuatorMask & CMD_FRONT_L_TURN) monitored_turn = 1;
+                if (actuatorMask & CMD_FRONT_R_TURN) monitored_turn = 2;
+                if ((actuatorMask & CMD_FRONT_L_TURN) && (actuatorMask & CMD_FRONT_R_TURN)) monitored_turn = 3;
+            }
 
-				// Tách 2 bit tiếp theo (0-3): Trạng thái xi-nhan / hazard
-				monitored_turn  = (raw_value >> 3) & 0x03;
-			}
+            // 3. Giải mã chuẩn ID 0x2FF (Front Error) khi F411 giữ nút báo lỗi
+            if (rxed_can_id == CAN_ID_FRONT_ERROR && rxed_dlc == 2) {
+                error_code_received = rxed_data[0]; // Nhận mã lỗi (Ví dụ: 0x01)
+                error_device_mask   = rxed_data[1]; // Nhận mã thiết bị (Ví dụ: 0x08)
+            }
 
+            // 4. Nháy LED PC13 báo hiệu nhận dữ liệu CAN thành công
             if (rx_counter % 2 == 0) {
-					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // Sáng
-				} else {
-					HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);   // Tắt
-				}
+                HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // Sáng
+            } else {
+                HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);   // Tắt
+            }
         }
     }
 }

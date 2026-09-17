@@ -6,19 +6,17 @@
  */
 
 #include "data_uart.h"
-
-
+#include "can_messages.h"
+#include "data_can.h"
 
 static uint8_t uartRxByte;
-//static uint8_t rxPacket[4];
-//static uint8_t rxIndex = 0;
 static UART_HandleTypeDef *pUartHandle;
 
 volatile uint8_t f103_wiperStatus = 0;
 volatile uint8_t f103_turnStatus = 0;
 
 extern CAN_HandleTypeDef hcan;
-void CAN_Send_Front_Command(CAN_HandleTypeDef *hcan, uint8_t wiperStatus, uint8_t turnStatus);
+void CAN_Send_Front_Status(CAN_HandleTypeDef *hcan, uint8_t actuatorMask, uint8_t wiperFlag);
 
 void F103_Bridge_Init(UART_HandleTypeDef *huart) {
     pUartHandle = huart;
@@ -32,30 +30,34 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
         slide_buf[slide_idx++] = uartRxByte;
 
-        // Nếu byte đầu tiên không phải 0x55, dịch mảng sang trái để tìm kiếm header đúng
-        if (slide_idx == 1 && slide_buf[0] != 0x55) {
+        // Nếu byte đầu không phải 0x55 (Status) và cũng không phải 0xEE (Error) -> Dịch mảng
+        if (slide_idx == 1 && slide_buf[0] != 0x55 && slide_buf[0] != 0xEE) {
             slide_idx = 0;
         }
-        // Khi đã gom đủ 4 byte theo đúng khung truyền
+        // Khi gom đủ 4 byte
         else if (slide_idx >= 4) {
-            uint8_t w = slide_buf[1];
-            uint8_t t = slide_buf[2];
-            uint8_t cs = slide_buf[3];
+            uint8_t byte1 = slide_buf[1];
+            uint8_t byte2 = slide_buf[2];
+            uint8_t cs    = slide_buf[3];
 
-            // Kiểm tra checksum khớp hoàn toàn
-            if (cs == (uint8_t)(w + t)) {
-                f103_wiperStatus = w;
-                f103_turnStatus  = t;
+            // Kiểm tra checksum
+            if (cs == (uint8_t)(byte1 + byte2)) {
 
-                // Gửi dữ liệu ra mạng CAN ngay khi nhận chuẩn
-                CAN_Send_Front_Command(&hcan, w, t);
+                // Rẽ nhánh tùy theo Header từ F411 truyền lên
+                if (slide_buf[0] == 0x55) {
+                    // Dữ liệu trạng thái bình thường -> Gửi CAN 0x200
+                    f103_wiperStatus = byte1;
+                    f103_turnStatus  = byte2;
+                    CAN_Send_Front_Status(&hcan, byte1, byte2);
+                }
+                else if (slide_buf[0] == 0xEE) {
+                    // Cảnh báo lỗi phần cứng -> Gửi CAN 0x2FF
+                    CAN_Send_Front_Error(&hcan, byte1, byte2);
+                }
             }
-
-            // LUÔN RESET LẠI INDEX ĐỂ ĐÓN GÓI TIN TIẾP THEO (KHÔNG BỊ KẸT)
             slide_idx = 0;
         }
 
-        // BẮT BUỘC: Tiếp tục lắng nghe byte tiếp theo qua ngắt UART
         HAL_UART_Receive_IT(pUartHandle, &uartRxByte, 1);
     }
 }

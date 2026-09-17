@@ -12,6 +12,7 @@ static uint8_t rxPacket[4];
 static uint8_t rxIndex = 0;
 static UART_HandleTypeDef *pUartHandle;
 
+
 uint8_t currentCmdWiper = 0;
 uint8_t currentCmdTurn = 0;
 
@@ -19,6 +20,17 @@ void Bridge_Init(UART_HandleTypeDef *huart) {
     pUartHandle = huart;
     // Vẫn duy trì ngắt nhận (RX) để giữ khả năng giao tiếp hai chiều khi cần
     HAL_UART_Receive_IT(pUartHandle, &uartRxByte, 1);
+}
+
+// Thêm vào data_uart.c (của F411)
+void Bridge_SendError(uint8_t errorCode, uint8_t errorMask) {
+    uint8_t txPacket[4];
+    txPacket[0] = 0xEE;                           // Header ĐẶC BIỆT dành cho việc báo lỗi
+    txPacket[1] = errorCode;                      // Ví dụ: ERR_WIPER_STALL (0x06)
+    txPacket[2] = errorMask;                      // Ví dụ: CMD_FRONT_WIPER (0x04)
+    txPacket[3] = (uint8_t)(errorCode + errorMask); // Checksum
+
+    HAL_UART_Transmit(pUartHandle, txPacket, 4, 100);
 }
 
 /* Hàm truyền dữ liệu trạng thái từ MCU lên host/Mac hoặc con F103 (TX) */

@@ -9,17 +9,18 @@
 #include "motor.h"
 #include "data_uart.h"
 #include "turnsignal.h"
+#include "can_messages.h" // Nhớ include file chứa CmdWiper_t
 
 
 extern TIM_HandleTypeDef htim2;
 extern ADC_HandleTypeDef hadc1;
 extern void Bridge_SendStatus(uint8_t wiperMode, uint8_t turnMode);
-extern SignalMode_t TurnSignal_GetMode(void);
+extern CmdTurn_t TurnSignal_GetMode(void);
 
 
 static mCrtlWiper_t mWiper = {
-		.currentWiper = Wiper_Off,
-		.tagetWiper = Wiper_Off,
+		.currentWiper = CMD_WIPER_OFF,
+		.tagetWiper = CMD_WIPER_OFF,
 		.lastDebounceTimeWiper = 0,
 		.lastBtnWiperState = GPIO_PIN_SET,
 		.wiperTime = 0,
@@ -53,7 +54,7 @@ void Servo_Init(void) {
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 }
 
-WiperMode_t Servo_GetWiperMode(void) {
+CmdWiper_t Servo_GetWiperMode(void) {
     return mWiper.currentWiper;
 }
 
@@ -62,8 +63,8 @@ void Wiper_Task(void){
 	static uint8_t lastCmdWiper = 0;
 	    if (currentCmdWiper != lastCmdWiper) {
 	        lastCmdWiper = currentCmdWiper;
-	        if (currentCmdWiper <= Wiper_Auto) {
-	            mWiper.tagetWiper = (WiperMode_t)currentCmdWiper;
+	        if (currentCmdWiper <= CMD_WIPER_AUTO) {
+	            mWiper.tagetWiper = (CmdWiper_t)currentCmdWiper;
 	            mWiper.currentWiper = mWiper.tagetWiper;
 	            mWiper.wiperTime = HAL_GetTick();
 	        }
@@ -74,8 +75,8 @@ void Wiper_Task(void){
 	if (currentBtnWiperState == GPIO_PIN_RESET && mWiper.lastBtnWiperState == GPIO_PIN_SET) {
 		if (HAL_GetTick() - mWiper.lastDebounceTimeWiper >= 200) {
 			mWiper.tagetWiper++;
-			if (mWiper.tagetWiper > Wiper_Auto) {
-				mWiper.tagetWiper = Wiper_Off;
+			if (mWiper.tagetWiper > CMD_WIPER_AUTO) {
+				mWiper.tagetWiper = CMD_WIPER_OFF;
 			}
 			mWiper.currentWiper = mWiper.tagetWiper;
 			mWiper.wiperTime = HAL_GetTick();
@@ -92,13 +93,13 @@ void Wiper_Task(void){
 	}
 
 	switch (mWiper.currentWiper){
-		case Wiper_Off:
+		case CMD_WIPER_OFF:
 			Servo_SetAngle(1000);
 			Wiper_UpdateOutputs(GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET);
 			Motor_Wash_Task(0); // Tắt bơm nước
 			break;
 
-		case Wiper_Int:
+		case CMD_WIPER_INTERMITTENT:
 			Motor_Wash_Task(1); // Bật chu kỳ bơm nước (3 giây xịt 1 lần)
 			if(HAL_GetTick() - mWiper.wiperTime < 1000 ){
 				Servo_SetAngle(2000);
@@ -113,11 +114,11 @@ void Wiper_Task(void){
 			}
 			break;
 
-		case Wiper_Low:
+		case CMD_WIPER_SLOW:
 			Motor_Wash_Task(0); // Tắt bơm nước
 			if (HAL_GetTick() - mWiper.wiperTime < 1000) {
 				Servo_SetAngle(2000);
-				Wiper_UpdateOutputs(GPIO_PIN_RESET, GPIO_PIN_SET, GPIO_PIN_RESET, GPIO_PIN_RESET); // (giữ nguyên logic LED)
+				Wiper_UpdateOutputs(GPIO_PIN_RESET, GPIO_PIN_SET, GPIO_PIN_RESET, GPIO_PIN_RESET);
 			}
 			else if (HAL_GetTick() - mWiper.wiperTime < 2500) {
 				Servo_SetAngle(1000);
@@ -128,7 +129,8 @@ void Wiper_Task(void){
 			}
 			break;
 
-		case Wiper_Hi:
+		case CMD_WIPER_NORMAL: // Ánh xạ tương đương chế độ Hi/Normal trước đây
+		case CMD_WIPER_FAST:
 			Motor_Wash_Task(0); // Tắt bơm nước
 			if (HAL_GetTick() - mWiper.wiperTime < 300) {
 				Servo_SetAngle(2000);
@@ -143,7 +145,7 @@ void Wiper_Task(void){
 			}
 			break;
 
-		case Wiper_Auto:
+		case CMD_WIPER_AUTO:
 				{
 					uint16_t rainValue = mWiper.cachedRainValue;
 					uint8_t currentAutoSubState = 4; // Mặc định là 4 (Auto chờ)
@@ -201,11 +203,11 @@ void Wiper_Task(void){
 					}
 
 					// TỰ ĐỘNG BẮN DỮ LIỆU KHI CẤP ĐỘ THAY ĐỔI NGẦM (KHÔNG CẦN BẤM NÚT)
-								static uint8_t lastSentAutoState = 0xFF;
-								if (currentAutoSubState != lastSentAutoState) {
-									lastSentAutoState = currentAutoSubState;
-									Bridge_SendStatus(currentAutoSubState, (uint8_t)TurnSignal_GetMode());
-								}
+					static uint8_t lastSentAutoState = 0xFF;
+					if (currentAutoSubState != lastSentAutoState) {
+						lastSentAutoState = currentAutoSubState;
+						Bridge_SendStatus(currentAutoSubState, (uint8_t)TurnSignal_GetMode());
+					}
 					break;
 				}
 

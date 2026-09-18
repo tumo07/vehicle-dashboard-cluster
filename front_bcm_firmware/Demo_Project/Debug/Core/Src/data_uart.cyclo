@@ -1,4 +1,4 @@
-../Core/Src/data_uart.c:19:6:Bridge_Init	1
-../Core/Src/data_uart.c:26:6:Bridge_SendError	1
-../Core/Src/data_uart.c:37:6:Bridge_SendStatus	1
-../Core/Src/data_uart.c:48:6:HAL_UART_RxCpltCallback	6
+../Core/Src/data_uart.c:25:6:Bridge_Init	1
+../Core/Src/data_uart.c:32:6:Bridge_SendFault	2
+../Core/Src/data_uart.c:50:6:HAL_UART_RxCpltCallback	6
+../Core/Src/data_uart.c:76:6:Bridge_SendStatus	2

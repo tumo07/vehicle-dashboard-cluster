@@ -47,7 +47,6 @@ CAN_HandleTypeDef hcan;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,6 +54,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN_Init(void);
 static void MX_USART1_UART_Init(void);
+void CAN_Send_Heartbeat(CAN_HandleTypeDef *hcan, uint8_t status, uint8_t counter);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -104,23 +104,56 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  static uint32_t last_heartbeat_tick = 0;
+  static uint8_t hb_counter = 0;
+
   while (1)
   {
     /* USER CODE END WHILE */
-//	  CAN_TxHeaderTypeDef TxHeader;
-//	  uint32_t pTxMailbox;
-//	  uint8_t testData[1] = {0xAA};
-//
-//	  TxHeader.StdId = 0x110;
-//	  TxHeader.ExtId = 0x00;
-//	  TxHeader.RTR = CAN_RTR_DATA;
-//	  TxHeader.IDE = CAN_ID_STD;
-//	  TxHeader.DLC = 1;
-//	  TxHeader.TransmitGlobalTime = DISABLE;
-//
-//	  HAL_CAN_AddTxMessage(&hcan, &TxHeader, testData, &pTxMailbox);
-//	  HAL_Delay(500); // Gửi mỗi 0.5 giây
+
     /* USER CODE BEGIN 3 */
+	  // Bật đoạn code này lên để test trực tiếp:
+	  	  CAN_TxHeaderTypeDef TxHeader;
+	  	  uint32_t pTxMailbox;
+	  	  uint8_t testData[5] = {2, 0x10, 0x30, 1, 5}; // Mô phỏng gói tin lỗi chuẩn v3.0[cite: 1]
+
+	  	  TxHeader.StdId = 0x500; // CAN_ID_FAULT_FRONT_BCM[cite: 1]
+	  	  TxHeader.ExtId = 0x00;
+	  	  TxHeader.RTR = CAN_RTR_DATA;
+	  	  TxHeader.IDE = CAN_ID_STD;
+	  	  TxHeader.DLC = 5;       // DLC = 5[cite: 1]
+	  	  TxHeader.TransmitGlobalTime = DISABLE;
+
+	  	  HAL_CAN_AddTxMessage(&hcan, &TxHeader, testData, &pTxMailbox);
+	  	  HAL_Delay(500); // Phát lên bus mỗi 0.5 giây
+
+	  	// Đoạn này đặt trong vòng lặp while(1) của main.c hoặc hàm nền:
+	  	if (ack_status == ACK_STATUS_APPROVED) {
+	  	    CAN_Send_Join_Request(&hcan);
+	  	    last_req_tick = HAL_GetTick();
+	  	    ack_status = ACK_STATUS_REJECTED; // Chuyển sang chờ phản hồi
+	  	}
+	  	else if (ack_status == ACK_STATUS_REJECTED) {
+	  	    // Sau 500ms nếu ECU chưa phản hồi (do nghẽn mạng hoặc chưa bật), gửi lại yêu cầu (Retry)
+	  	    if (HAL_GetTick() - last_req_tick > 500) {
+	  	        CAN_Send_Join_Request(&hcan);
+	  	        last_req_tick = HAL_GetTick();
+	  	    }
+	  	}
+	  	else if (ack_status == ACK_STATUS_PENDING) {
+	  	    // === ĐÃ ĐƯỢC CHẤP NHẬN ===
+	  	    // Lúc này luồng nhận UART từ F411 và bắn CAN 0x400 / 0x500 của bạn mới chính thức hoạt động!
+	  	}
+
+	  	if (ack_status == ACK_STATUS_PENDING) {
+	  	    if (HAL_GetTick() - last_heartbeat_tick > 1000) { // Gửi định kỳ mỗi 200ms
+	  	        last_heartbeat_tick = HAL_GetTick();
+	  	        hb_counter++;
+
+	  	        CAN_Send_Heartbeat(&hcan, (uint8_t)ack_status, hb_counter);
+	  	    }
+	  	}
+
   }
   /* USER CODE END 3 */
 }

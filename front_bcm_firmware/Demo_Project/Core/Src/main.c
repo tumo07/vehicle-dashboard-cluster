@@ -25,6 +25,7 @@
 #include "turnsignal.h"
 #include "data_uart.h"
 #include "motor.h"
+#include "can_messages.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,6 +52,10 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+volatile uint32_t leftHoldTime = 0, rightHoldTime = 0, wiperHoldTime = 0; hazardHoldTime=0;
+volatile uint8_t leftHolding = 0, rightHolding = 0, wiperHolding = 0; hazardHolding = 0;
+volatile uint8_t leftSent = 0, rightSent = 0, wiperSent = 0; hazardSent = 0;
+volatile uint8_t err_counter = 0;
 
 /* USER CODE END PV */
 
@@ -62,13 +67,12 @@ static void MX_ADC1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
 
-/* Khai báo biến đếm thời gian giữ cho từng nút */
-static uint32_t leftHoldTime = 0, rightHoldTime = 0, hazardHoldTime = 0, wiperHoldTime = 0;
-static uint8_t leftHolding = 0, rightHolding = 0, hazardHolding = 0, wiperHolding = 0;
-
 /* USER CODE BEGIN PFP */
 void Wiper_Task(void);
 extern void Bridge_SendError(uint8_t errorCode, uint8_t errorMask);
+
+
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -114,71 +118,83 @@ int main(void)
   TurnSignal_Init();
   Bridge_Init(&huart2);
   Servo_Init();
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  // 1. Kiểm tra nút Xi-nhan Trái (GPIOB, BTN_TurnLeft_Pin) - Giữ > 1.5s báo lỗi 0x01
+	  // 1. Xi-nhan Trái (Giữ > 1.5s -> DTC_B1030)
 	        if (HAL_GPIO_ReadPin(GPIOB, BTN_TurnLeft_Pin) == GPIO_PIN_RESET) {
 	            if (!leftHolding) {
 	                leftHoldTime = HAL_GetTick();
 	                leftHolding = 1;
-	            } else if ((HAL_GetTick() - leftHoldTime) >= 1500) {
-	                Bridge_SendError(0x01, 0x01); // Mã lỗi 0x01, thiết bị 0x01 (Left Turn)
-	                leftHoldTime = HAL_GetTick();
+	                leftSent = 0;
+	            } else if (!leftSent && (HAL_GetTick() - leftHoldTime) >= 1500) {
+	                err_counter++;
+	                Bridge_SendFault(DTC_SEVERITY_ERROR, DTC_B1030, err_counter, ERR_ACTUATOR_STALL);
+	                leftSent = 1; // Đã gửi xong, khóa lại cho đến khi nhả tay
 	            }
 	        } else {
 	            leftHolding = 0;
+	            leftSent = 0;
 	        }
 
-	        // 2. Kiểm tra nút Xi-nhan Phải (GPIOB, BTN_TurnRight_Pin) - Giữ > 1.5s báo lỗi 0x02
+	        // 2. Xi-nhan Phải (Giữ > 1.5s -> DTC_B1031)
 	        if (HAL_GPIO_ReadPin(GPIOB, BTN_TurnRight_Pin) == GPIO_PIN_RESET) {
 	            if (!rightHolding) {
 	                rightHoldTime = HAL_GetTick();
 	                rightHolding = 1;
-	            } else if ((HAL_GetTick() - rightHoldTime) >= 1500) {
-	                Bridge_SendError(0x01, 0x02); // Mã lỗi 0x01, thiết bị 0x02 (Right Turn)
-	                rightHoldTime = HAL_GetTick();
+	                rightSent = 0;
+	            } else if (!rightSent && (HAL_GetTick() - rightHoldTime) >= 1500) {
+	                err_counter++;
+	                Bridge_SendFault(DTC_SEVERITY_ERROR, DTC_B1031, err_counter, ERR_ACTUATOR_STALL);
+	                rightSent = 1;
 	            }
 	        } else {
 	            rightHolding = 0;
+	            rightSent = 0;
 	        }
 
-	        // 3. Kiểm tra nút Hazard (GPIOB, BTN_Hazard_Pin) - Giữ > 1.5s báo lỗi 0x03
-	        if (HAL_GPIO_ReadPin(GPIOB, BTN_Hazard_Pin) == GPIO_PIN_RESET) {
-	            if (!hazardHolding) {
-	                hazardHoldTime = HAL_GetTick();
-	                hazardHolding = 1;
-	            } else if ((HAL_GetTick() - hazardHoldTime) >= 1500) {
-	                Bridge_SendError(0x01, 0x03); // Mã lỗi 0x01, thiết bị 0x03 (Hazard)
-	                hazardHoldTime = HAL_GetTick();
-	            }
-	        } else {
-	            hazardHolding = 0;
-	        }
-
-	        // 4. Kiểm tra nút Gạt mưa (GPIOE, BTN_WiperMode_Pin) - Giữ > 1.5s báo lỗi 0x04
+	        // 3. Gạt mưa (Giữ > 1.5s -> DTC_B1010)
 	        if (HAL_GPIO_ReadPin(GPIOE, BTN_WiperMode_Pin) == GPIO_PIN_RESET) {
 	            if (!wiperHolding) {
 	                wiperHoldTime = HAL_GetTick();
 	                wiperHolding = 1;
-	            } else if ((HAL_GetTick() - wiperHoldTime) >= 1500) {
-	                Bridge_SendError(0x01, 0x04); // Mã lỗi 0x01, thiết bị 0x04 (Wiper)
-	                wiperHoldTime = HAL_GetTick();
+	                wiperSent = 0;
+	            } else if (!wiperSent && (HAL_GetTick() - wiperHoldTime) >= 1500) {
+	                err_counter++;
+	                Bridge_SendFault(DTC_SEVERITY_ERROR, DTC_B1010, err_counter, ERR_WIPER_STALL);
+	                wiperSent = 1;
 	            }
 	        } else {
 	            wiperHolding = 0;
+	            wiperSent = 0;
 	        }
+	        // 4. Nút Hazard (Giữ > 1.5s -> Giả lập kẹt nút / chập mạch khẩn cấp)
+			if (HAL_GPIO_ReadPin(GPIOB, BTN_Hazard_Pin) == GPIO_PIN_RESET) {
+				if (!hazardHolding) {
+					hazardHoldTime = HAL_GetTick();
+					hazardHolding = 1;
+					hazardSent = 0;
+				} else if (!hazardSent && (HAL_GetTick() - hazardHoldTime) >= 1500) {
+					err_counter++;
+					// Có thể dùng mã DTC_B1030 hoặc một mã body tương đương để báo lỗi cụm công tắc/relay hazard
+					Bridge_SendFault(DTC_SEVERITY_ERROR, DTC_B1030, err_counter, ERR_ACTUATOR_STALL);
+					hazardSent = 1; // Khóa lại, chỉ gửi 1 lần cho đến khi nhả tay
+				}
+			} else {
+				hazardHolding = 0;
+				hazardSent = 0; // Khi nhả tay ra thì reset để cho phép test lại lần sau
+			}
 
-	        Wiper_Task();
-	        HAL_Delay(10);
-	        TurnSignal_Task();
+	Wiper_Task();
+	HAL_Delay(10);
+	TurnSignal_Task();
 	    }
   /* USER CODE END 3 */
 }

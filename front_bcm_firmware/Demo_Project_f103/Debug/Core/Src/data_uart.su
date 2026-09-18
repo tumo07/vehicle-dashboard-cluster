@@ -1,2 +1,2 @@
-../Core/Src/data_uart.c:21:6:F103_Bridge_Init	16	static
-../Core/Src/data_uart.c:26:6:HAL_UART_RxCpltCallback	24	static
+../Core/Src/data_uart.c:27:6:F103_Bridge_Init	16	static
+../Core/Src/data_uart.c:32:6:HAL_UART_RxCpltCallback	104	static

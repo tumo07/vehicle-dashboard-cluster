@@ -23,7 +23,7 @@ Core/Src/can_receiver.o: ../Core/Src/can_receiver.c \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h \
- ../Core/Inc/can_messages.h ../Core/Inc/main.h
+ ../Core/Inc/can_messages.h ../Core/Inc/main.h ../Core/Inc/can_messages.h
 ../Core/Inc/can_receiver.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h:
 ../Core/Inc/stm32f1xx_hal_conf.h:
@@ -50,3 +50,4 @@ Core/Src/can_receiver.o: ../Core/Src/can_receiver.c \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h:
 ../Core/Inc/can_messages.h:
 ../Core/Inc/main.h:
+../Core/Inc/can_messages.h:

@@ -4,9 +4,9 @@
 #include "stm32f4xx_hal.h"
 
 void Bridge_Init(UART_HandleTypeDef *huart);
+void Bridge_SendFault(uint8_t severity, uint16_t dtc_code, uint8_t counter, uint8_t simple_err);
 void Bridge_SendStatus(uint8_t wiperMode, uint8_t turnMode);
 extern uint8_t currentCmdWiper;
 extern uint8_t currentCmdTurn;
-void Bridge_SendError(uint8_t errorCode, uint8_t errorMask);
 
 #endif /* INC_DATA_UART_H_ */

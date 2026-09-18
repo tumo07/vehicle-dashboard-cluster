@@ -9,19 +9,13 @@
 #define INC_TURNSIGNAL_H_
 
 #include "main.h"
-
-typedef enum {
-	Off = 0	,
-	Left	,
-	Right	,
-	Hazard	,
-} SignalMode_t ;
+#include "can_messages.h"
 
 
 void TurnSignal_Init(void);
 void TurnSignal_Task(void);
 
-SignalMode_t TurnSignal_GetMode(void);
+CmdTurn_t TurnSignal_GetMode(void);
 
 
 #endif /* INC_TURNSIGNAL_H_ */

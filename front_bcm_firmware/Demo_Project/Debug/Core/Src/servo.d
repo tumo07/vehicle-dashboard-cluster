@@ -30,7 +30,8 @@ Core/Src/servo.o: ../Core/Src/servo.c ../Core/Inc/servo.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
- ../Core/Inc/motor.h ../Core/Inc/data_uart.h ../Core/Inc/turnsignal.h
+ ../Core/Inc/can_messages.h ../Core/Inc/motor.h ../Core/Inc/data_uart.h \
+ ../Core/Inc/turnsignal.h ../Core/Inc/can_messages.h
 ../Core/Inc/servo.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
@@ -64,6 +65,8 @@ Core/Src/servo.o: ../Core/Src/servo.c ../Core/Inc/servo.h \
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
+../Core/Inc/can_messages.h:
 ../Core/Inc/motor.h:
 ../Core/Inc/data_uart.h:
 ../Core/Inc/turnsignal.h:
+../Core/Inc/can_messages.h:

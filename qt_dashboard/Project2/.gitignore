@@ -1,0 +1,15 @@
+build/
+**/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+.ninja_*
+*.user
+*.user.*
+*.exe
+*.dll
+*.o
+*.obj
+.qmlcache/
+*_autogen/

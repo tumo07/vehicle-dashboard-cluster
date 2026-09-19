@@ -1,4 +1,5 @@
-Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/RX_data_UART.h \
+Core/Src/RX_data_CAN.o: ../Core/Src/RX_data_CAN.c \
+ ../Core/Inc/RX_data_CAN.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h \
  ../Core/Inc/stm32f1xx_hal_conf.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc.h \
@@ -23,9 +24,9 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/RX_data_UART.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h \
- ../Core/Inc/RX_data_CAN.h ../Core/Inc/main.h ../Core/Inc/TX_data_CAN.h \
+ ../Core/Inc/TX_data_CAN.h ../Core/Inc/can_messages.h \
  ../Core/Inc/can_messages.h
-../Core/Inc/RX_data_UART.h:
+../Core/Inc/RX_data_CAN.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h:
 ../Core/Inc/stm32f1xx_hal_conf.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc.h:
@@ -50,7 +51,6 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/RX_data_UART.h \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h:
-../Core/Inc/RX_data_CAN.h:
-../Core/Inc/main.h:
 ../Core/Inc/TX_data_CAN.h:
+../Core/Inc/can_messages.h:
 ../Core/Inc/can_messages.h:

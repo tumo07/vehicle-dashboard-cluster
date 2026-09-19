@@ -17,13 +17,14 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include "RX_data_UART.h"
+#include "RX_data_CAN.h"
 #include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "data_uart.h"
-#include "data_can.h"
 #include <stdio.h>
+#include "TX_data_CAN.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -115,19 +116,19 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  // Bật đoạn code này lên để test trực tiếp:
-	  	  CAN_TxHeaderTypeDef TxHeader;
-	  	  uint32_t pTxMailbox;
-	  	  uint8_t testData[5] = {2, 0x10, 0x30, 1, 5}; // Mô phỏng gói tin lỗi chuẩn v3.0[cite: 1]
-
-	  	  TxHeader.StdId = 0x500; // CAN_ID_FAULT_FRONT_BCM[cite: 1]
-	  	  TxHeader.ExtId = 0x00;
-	  	  TxHeader.RTR = CAN_RTR_DATA;
-	  	  TxHeader.IDE = CAN_ID_STD;
-	  	  TxHeader.DLC = 5;       // DLC = 5[cite: 1]
-	  	  TxHeader.TransmitGlobalTime = DISABLE;
-
-	  	  HAL_CAN_AddTxMessage(&hcan, &TxHeader, testData, &pTxMailbox);
-	  	  HAL_Delay(500); // Phát lên bus mỗi 0.5 giây
+//	  	  CAN_TxHeaderTypeDef TxHeader;
+//	  	  uint32_t pTxMailbox;
+//	  	  uint8_t testData[5] = {2, 0x10, 0x30, 1, 5}; // Mô phỏng gói tin lỗi chuẩn v3.0[cite: 1]
+//
+//	  	  TxHeader.StdId = 0x500; // CAN_ID_FAULT_FRONT_BCM[cite: 1]
+//	  	  TxHeader.ExtId = 0x00;
+//	  	  TxHeader.RTR = CAN_RTR_DATA;
+//	  	  TxHeader.IDE = CAN_ID_STD;
+//	  	  TxHeader.DLC = 5;       // DLC = 5[cite: 1]
+//	  	  TxHeader.TransmitGlobalTime = DISABLE;
+//
+//	  	  HAL_CAN_AddTxMessage(&hcan, &TxHeader, testData, &pTxMailbox);
+//	  	  HAL_Delay(500); // Phát lên bus mỗi 0.5 giây
 
 	  	// Đoạn này đặt trong vòng lặp while(1) của main.c hoặc hàm nền:
 	  	if (ack_status == ACK_STATUS_APPROVED) {
@@ -148,6 +149,22 @@ int main(void)
 	  	}
 
 	  	if (ack_status == ACK_STATUS_PENDING) {
+	  		// === XỬ LÝ LỆNH TỪ CENTRAL ECU GỬI XUỐNG FRONT BCM ===
+	  		if (new_cmd_rx_flag == 1) {
+	  		    new_cmd_rx_flag = 0; // Xóa cờ để đón lệnh tiếp theo
+
+	  		    // Đóng gói 5 byte UART: [Header] [Lệnh] [Data0] [Data1] [Checksum]
+	  		    uint8_t txUart[5] = {0xAA, 0x00, 0x00, 0x00, 0x00};
+
+	  		    // Ví dụ: Bắn lệnh gạt mưa (bạn có thể bổ sung thêm các lệnh đèn, xi-nhan tùy ý)
+	  		    txUart[1] = 0x02; // Mã lệnh gạt mưa
+	  		    txUart[2] = rx_cmd_wiper_mode;
+	  		    txUart[3] = rx_cmd_wiper_washer;
+	  		    txUart[4] = (uint8_t)(txUart[1] + txUart[2] + txUart[3]); // Checksum
+
+	  		    HAL_UART_Transmit(&huart1, txUart, 5, 10);
+	  		}
+
 	  	    if (HAL_GetTick() - last_heartbeat_tick > 200) { // Gửi định kỳ mỗi 200ms
 	  	        last_heartbeat_tick = HAL_GetTick();
 	  	        hb_counter++;

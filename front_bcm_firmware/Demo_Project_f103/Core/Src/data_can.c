@@ -61,6 +61,10 @@ void CAN_Send_Heartbeat(CAN_HandleTypeDef *hcan, uint8_t status, uint8_t counter
     TxHeader.DLC = 2;                             // Độ dài 2 bytes đúng yêu cầu
     TxHeader.TransmitGlobalTime = DISABLE;
 
+    uint32_t timeout = HAL_GetTick();
+	while(HAL_CAN_GetTxMailboxesFreeLevel(hcan) == 0) {
+		if (HAL_GetTick() - timeout > 2) return; // Timeout sau 2ms nếu bus kẹt
+        }
     // Gửi bản tin lên mạng CAN bus
     if (HAL_CAN_AddTxMessage(hcan, &TxHeader, txData, &pTxMailbox) != HAL_OK) {
         // Xử lý lỗi truyền nếu cần

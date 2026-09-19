@@ -21,11 +21,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "servo.h"
 #include "turnsignal.h"
 #include "data_uart.h"
-#include "motor.h"
+#include "wiper.h"
 #include "can_messages.h"
+#include "front_tx_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,9 +52,9 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-volatile uint32_t leftHoldTime = 0, rightHoldTime = 0, wiperHoldTime = 0; hazardHoldTime=0;
-volatile uint8_t leftHolding = 0, rightHolding = 0, wiperHolding = 0; hazardHolding = 0;
-volatile uint8_t leftSent = 0, rightSent = 0, wiperSent = 0; hazardSent = 0;
+volatile uint32_t leftHoldTime = 0, rightHoldTime = 0, wiperHoldTime = 0, hazardHoldTime=0;
+volatile uint8_t leftHolding = 0, rightHolding = 0, wiperHolding = 0, hazardHolding = 0;
+volatile uint8_t leftSent = 0, rightSent = 0, wiperSent = 0, hazardSent = 0;
 volatile uint8_t err_counter = 0;
 
 /* USER CODE END PV */
@@ -66,9 +66,7 @@ static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
-
 /* USER CODE BEGIN PFP */
-void Wiper_Task(void);
 extern void Bridge_SendError(uint8_t errorCode, uint8_t errorMask);
 
 
@@ -114,10 +112,9 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-//  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
   TurnSignal_Init();
   Bridge_Init(&huart2);
-  Servo_Init();
+  Wiper_System_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -192,9 +189,10 @@ int main(void)
 				hazardSent = 0; // Khi nhả tay ra thì reset để cho phép test lại lần sau
 			}
 
-	Wiper_Task();
-	HAL_Delay(10);
-	TurnSignal_Task();
+			Wiper_Task();
+			HAL_Delay(100);
+			TurnSignal_Task();
+			Front_BCM_Periodic_TX_Task();
 	    }
   /* USER CODE END 3 */
 }
@@ -481,8 +479,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOD, LD4_Pin|LD3_Pin|LD5_Pin|LD6_Pin
                           |Signal_Left_Pin|Signal_Right_Pin|Audio_RST_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PE2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  /*Configure GPIO pins : PE2 Sensor_WaterLevel_Pin */
+  GPIO_InitStruct.Pin = GPIO_PIN_2|Sensor_WaterLevel_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);

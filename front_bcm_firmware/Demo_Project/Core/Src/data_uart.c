@@ -46,6 +46,54 @@ void Bridge_SendFault(uint8_t severity, uint16_t dtc_code, uint8_t counter, uint
 
     HAL_UART_Transmit(pUartHandle, txPacket, 6, 100);
 }
+// Gửi bản tin trạng thái thiết bị định kỳ (CAN ID 0x400 - DLC: 3)
+void Bridge_SendStatusReport(uint8_t actuatorFlags, uint8_t wiperMode, uint8_t motorHealth) {
+    uint8_t txPacket[4];
+    txPacket[0] = 0x40; // Header nhận diện Status Report (0x400)
+    txPacket[1] = actuatorFlags;
+    txPacket[2] = wiperMode;
+    txPacket[3] = motorHealth;
+
+    HAL_UART_Transmit(pUartHandle, txPacket, 4, 100);
+}
+
+// Gửi bản tin cảm biến định kỳ (CAN ID 0x401 - DLC: 2)
+void Bridge_SendSensorReport(uint8_t rainPercent, uint8_t waterPercent) {
+    uint8_t txPacket[3];
+    txPacket[0] = 0x41; // Header nhận diện Sensor Report (0x401)
+    txPacket[1] = rainPercent;
+    txPacket[2] = waterPercent;
+
+    HAL_UART_Transmit(pUartHandle, txPacket, 3, 100);
+}
+
+// Gửi bản tin Heartbeat nhịp tim (CAN ID 0x710 - DLC: 2)
+void Bridge_SendHeartbeat(uint8_t counter, uint8_t hbFlags) {
+    uint8_t txPacket[3];
+    txPacket[0] = 0x71; // Header nhận diện Heartbeat (0x710)
+    txPacket[1] = counter;
+    txPacket[2] = hbFlags;
+
+    HAL_UART_Transmit(pUartHandle, txPacket, 3, 100);
+}
+
+// Hàm gửi trạng thái định kỳ gạt mưa và xi-nhan qua UART (Header 0x55)
+void Bridge_SendWiperTurnStatus(uint8_t wiperMode, uint8_t turnMode) {
+    uint8_t txPacket[4];
+    txPacket[0] = 0x55;                       // Header nhận diện Status
+    txPacket[1] = wiperMode;                  // Trạng thái gạt mưa
+    txPacket[2] = turnMode;                   // Trạng thái xi-nhan
+    txPacket[3] = (uint8_t)(wiperMode + turnMode); // Checksum
+
+    for(int i = 0; i < 4; i++) {
+            dbg_uart_tx_buf[i] = txPacket[i];
+        }
+        dbg_uart_tx_len = 4;
+        dbg_uart_tx_count++;
+
+    HAL_UART_Transmit(pUartHandle, txPacket, 4, 100);
+}
+
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == pUartHandle->Instance) {
@@ -72,19 +120,4 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     }
 }
 
-// Hàm gửi trạng thái định kỳ gạt mưa và xi-nhan qua UART (Header 0x55)
-void Bridge_SendStatus(uint8_t wiperMode, uint8_t turnMode) {
-    uint8_t txPacket[4];
-    txPacket[0] = 0x55;                       // Header nhận diện Status
-    txPacket[1] = wiperMode;                  // Trạng thái gạt mưa
-    txPacket[2] = turnMode;                   // Trạng thái xi-nhan
-    txPacket[3] = (uint8_t)(wiperMode + turnMode); // Checksum
 
-    for(int i = 0; i < 4; i++) {
-            dbg_uart_tx_buf[i] = txPacket[i];
-        }
-        dbg_uart_tx_len = 4;
-        dbg_uart_tx_count++;
-
-    HAL_UART_Transmit(pUartHandle, txPacket, 4, 100);
-}

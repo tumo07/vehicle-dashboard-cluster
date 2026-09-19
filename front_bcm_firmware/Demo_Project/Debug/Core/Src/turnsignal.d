@@ -30,7 +30,7 @@ Core/Src/turnsignal.o: ../Core/Src/turnsignal.c ../Core/Inc/turnsignal.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
- ../Core/Inc/can_messages.h ../Core/Inc/data_uart.h ../Core/Inc/servo.h
+ ../Core/Inc/can_messages.h ../Core/Inc/data_uart.h ../Core/Inc/wiper.h
 ../Core/Inc/turnsignal.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
@@ -66,4 +66,4 @@ Core/Src/turnsignal.o: ../Core/Src/turnsignal.c ../Core/Inc/turnsignal.h \
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
 ../Core/Inc/can_messages.h:
 ../Core/Inc/data_uart.h:
-../Core/Inc/servo.h:
+../Core/Inc/wiper.h:

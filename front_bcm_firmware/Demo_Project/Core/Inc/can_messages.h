@@ -119,7 +119,7 @@ extern "C" {
 
 #define CAN_ID_REPORT_FRONT_SENSORS 0x401U
 /* DLC:2 every 500ms
- * Byte0: ambient light 0-100%
+ * Byte0: rain sensor 0-100% (NOTE: replaced ambient light)
  * Byte1: washer fluid 0-100% */
 
 #define CAN_ID_REPORT_REAR_STATUS   0x410U

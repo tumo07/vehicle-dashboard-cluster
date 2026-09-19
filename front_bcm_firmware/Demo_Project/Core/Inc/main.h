@@ -99,6 +99,8 @@ void Error_Handler(void);
 #define LED_Moto_GPIO_Port GPIOE
 #define BTN_WiperMode_Pin GPIO_PIN_8
 #define BTN_WiperMode_GPIO_Port GPIOE
+#define Sensor_WaterLevel_Pin GPIO_PIN_9
+#define Sensor_WaterLevel_GPIO_Port GPIOE
 #define CLK_IN_Pin GPIO_PIN_10
 #define CLK_IN_GPIO_Port GPIOB
 #define LD4_Pin GPIO_PIN_12

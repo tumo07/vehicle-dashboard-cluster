@@ -21,5 +21,6 @@ void CAN_Init_Filter_And_Start(CAN_HandleTypeDef *hcan);
 void CAN_Send_Front_Command(CAN_HandleTypeDef *hcan, uint8_t wiperStatus, uint8_t turnStatus);
 void CAN_Send_Front_Error(CAN_HandleTypeDef *hcan, uint8_t errorCode, uint8_t errorMask);
 void CAN_Send_Join_Request(CAN_HandleTypeDef *hcan);
+void CAN_Send_Heartbeat(CAN_HandleTypeDef *hcan, uint8_t status, uint8_t counter);
 
 #endif /* INC_DATA_CAN_H_ */

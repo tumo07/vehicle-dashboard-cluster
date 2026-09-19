@@ -15,6 +15,8 @@ volatile uint16_t dtc_code_received = 0;
 volatile uint8_t  dtc_counter = 0;
 volatile uint8_t  simple_error_code = 0;
 
+volatile uint8_t can_rx_flag = 0;
+
 void CAN_Receiver_Init(CAN_HandleTypeDef *hcan) {
     CAN_FilterTypeDef sFilterConfig;
     sFilterConfig.FilterBank = 0;
@@ -46,6 +48,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
             }
             rx_counter++;
 
+            can_rx_flag = 1;
+
             // 1. Giải mã chuẩn GROUP D: CAN_ID_REPORT_FRONT_STATUS (0x400)[cite: 1]
             if (rxed_can_id == CAN_ID_REPORT_FRONT_STATUS && rxed_dlc >= 2) {
                 uint8_t actuatorMask = rxed_data[0];
@@ -60,7 +64,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
             // 2. Giải mã chuẩn GROUP E: CAN_ID_FAULT_FRONT_BCM (0x500)[cite: 1]
             if (rxed_can_id == CAN_ID_FAULT_FRONT_BCM && rxed_dlc == 5) {
                 dtc_severity      = rxed_data[0];
-                dtc_code_received = PACK_U16(rxed_data[1], rxed_data[2]); //[cite: 1]
+                dtc_code_received = (rxed_data[1] << 8) | rxed_data[2]; // Dịch bit thủ công cho an toàn
                 dtc_counter       = rxed_data[3];
                 simple_error_code = rxed_data[4];
             }

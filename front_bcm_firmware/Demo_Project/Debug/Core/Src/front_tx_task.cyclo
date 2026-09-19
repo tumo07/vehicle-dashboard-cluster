@@ -1,0 +1,2 @@
+../Core/Src/front_tx_task.c:16:6:Front_TX_Task_Init	1
+../Core/Src/front_tx_task.c:20:6:Front_BCM_Periodic_TX_Task	4

@@ -19,11 +19,11 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "data_uart.h"
 #include "data_can.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,6 +45,7 @@
 CAN_HandleTypeDef hcan;
 
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 /* USER CODE END PV */
@@ -54,7 +55,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN_Init(void);
 static void MX_USART1_UART_Init(void);
-void CAN_Send_Heartbeat(CAN_HandleTypeDef *hcan, uint8_t status, uint8_t counter);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -95,6 +96,7 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN_Init();
   MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
   F103_Bridge_Init(&huart1);          // Khởi tạo module UART F103
@@ -135,7 +137,7 @@ int main(void)
 	  	}
 	  	else if (ack_status == ACK_STATUS_REJECTED) {
 	  	    // Sau 500ms nếu ECU chưa phản hồi (do nghẽn mạng hoặc chưa bật), gửi lại yêu cầu (Retry)
-	  	    if (HAL_GetTick() - last_req_tick > 500) {
+	  	    if (HAL_GetTick() - last_req_tick > 200) {
 	  	        CAN_Send_Join_Request(&hcan);
 	  	        last_req_tick = HAL_GetTick();
 	  	    }
@@ -146,14 +148,13 @@ int main(void)
 	  	}
 
 	  	if (ack_status == ACK_STATUS_PENDING) {
-	  	    if (HAL_GetTick() - last_heartbeat_tick > 1000) { // Gửi định kỳ mỗi 200ms
+	  	    if (HAL_GetTick() - last_heartbeat_tick > 200) { // Gửi định kỳ mỗi 200ms
 	  	        last_heartbeat_tick = HAL_GetTick();
 	  	        hb_counter++;
 
 	  	        CAN_Send_Heartbeat(&hcan, (uint8_t)ack_status, hb_counter);
 	  	    }
 	  	}
-
   }
   /* USER CODE END 3 */
 }
@@ -268,6 +269,39 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -288,6 +322,10 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+int __io_putchar(int ch) {
+    HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 10);
+    return ch;
+}
 
 /* USER CODE END 4 */
 

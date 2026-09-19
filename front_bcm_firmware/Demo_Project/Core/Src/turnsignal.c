@@ -1,6 +1,6 @@
 #include "turnsignal.h"
 #include "data_uart.h"
-#include "servo.h"
+#include "wiper.h" // Thay thế cho servo.h cũ do đã gộp
 
 static CmdTurn_t     currentTurnMode    = CMD_TURN_OFF;
 static uint32_t     lastFlashTime       = 0;
@@ -11,8 +11,7 @@ static uint8_t      lastLeftBtnState    = 1;
 static uint8_t      lastRightBtnState   = 1;
 static uint8_t      lastHazardBtnState  = 1;
 
-extern void Bridge_SendStatus(uint8_t wiperMode, uint8_t turnMode);
-extern CmdWiper_t Servo_GetWiperMode(void);
+extern void Bridge_SendWiperTurnStatus(uint8_t wiperMode, uint8_t turnMode);
 
 void TurnSignal_Init(void){
     currentTurnMode = CMD_TURN_OFF;
@@ -48,7 +47,7 @@ void TurnSignal_Task(void){
                 flashState = 1;
                 lastFlashTime = currentTime;
             }
-            Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
+            Bridge_SendWiperTurnStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
         }
         if (currentRightState == GPIO_PIN_RESET && lastRightBtnState == GPIO_PIN_SET){
             if(currentTurnMode == CMD_TURN_RIGHT){
@@ -59,7 +58,7 @@ void TurnSignal_Task(void){
                 flashState = 1;
                 lastFlashTime = currentTime;
             }
-            Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
+            Bridge_SendWiperTurnStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
         }
         if (currentHazardState == GPIO_PIN_RESET && lastHazardBtnState == GPIO_PIN_SET){
             if(currentTurnMode == CMD_TURN_HAZARD){
@@ -70,7 +69,7 @@ void TurnSignal_Task(void){
                 flashState = 1;
                 lastFlashTime = currentTime;
             }
-            Bridge_SendStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
+            Bridge_SendWiperTurnStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)currentTurnMode);
         }
 
         lastLeftBtnState    = currentLeftState;

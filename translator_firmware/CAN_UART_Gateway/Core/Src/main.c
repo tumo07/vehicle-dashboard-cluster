@@ -21,9 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
-#include <string.h>
-#include <can_messages.h>
+#include "can_messages.h"
+#include "can_gateway.h"
+#include "uart_protocol.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +33,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define UART_RX_BUFFER_SIZE 48U
+#define UART_INTERBYTE_TIMEOUT_MS 100U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,8 +43,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-
 CAN_HandleTypeDef hcan;
 
 UART_HandleTypeDef huart1;
@@ -56,194 +56,13 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_ADC1_Init(void);
+
 /* USER CODE BEGIN PFP */
-// Gửi một chuỗi ký tự qua UART1.
-static void UART_SendString(const char *text);
-//Cấu hình một CAN filter để chỉ nhận đúng một Standard ID.
-static HAL_StatusTypeDef CAN_ConfigExactStdIdFilter(uint32_t filter_bank, uint16_t std_id);
-//Cấu hình toàn bộ các CAN filter dùng cho gateway.
-static HAL_StatusTypeDef CAN_ConfigGatewayFilters(void);
-//Gửi một CAN Standard Data Frame.
-static HAL_StatusTypeDef CAN_SendStandardFrame(uint16_t std_id, const uint8_t *data, uint8_t dlc);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static void UART_SendString(const char *text)
-{
-	/* Bảo vệ chương trình khỏi việc truy cập con trỏ NULL. */
-	if (text == NULL)
-		{
-			return;
-		}
-
-	/*
-	* Gửi toàn bộ chuỗi qua UART1.
-	* Ép kiểu sang uint8_t * vì HAL_UART_Transmit() nhận vùng dữ liệu byte.
-	* Giá trị trả về hiện không được kiểm tra vì hàm này chỉ được dùng
-	* để xuất thông báo trạng thái và lỗi đơn giản.
-	*/
-    HAL_UART_Transmit(
-        &huart1,
-        (uint8_t *)text,
-        (uint16_t)strlen(text),
-        HAL_MAX_DELAY
-    );
-}
-
-/**
-* @brief Cấu hình filter để nhận chính xác một CAN Standard Data Frame ID.
-* bxCAN sử dụng thanh ghi filter 32 bit. Đối với Standard ID:
-* - 11 bit ID được đặt từ bit 15 đến bit 5 của nửa thanh ghi cao.
-* - IDE nằm tại bit 2 của nửa thanh ghi thấp.
-* - RTR nằm tại bit 1 của nửa thanh ghi thấp.
-* 0x07FF << 5 để so sánh đầy đủ cả 11 bit ID.
-* 0x0006 để kiểm tra IDE và RTR đều phải bằng 0.
-* @param filter_bank Filter bank được sử dụng.
-* @param std_id Standard ID cần nhận.
-* @return Trạng thái trả về từ HAL_CAN_ConfigFilter().
-*/
-static HAL_StatusTypeDef CAN_ConfigExactStdIdFilter(uint32_t filter_bank, uint16_t std_id)
-{
-	/* Khởi tạo toàn bộ cấu trúc filter về 0. */
-	CAN_FilterTypeDef filter = {0};
-
-	/*
-	* CAN Standard ID chỉ có 11 bit.
-	* AND loại bỏ các bit không hợp lệ phía trên.
-	*/
-	std_id &= 0x07FFU;
-
-	/* Chọn filter bank cần cấu hình. */
-	filter.FilterBank = filter_bank;
-	/* Phần FilterMaskId xác định các bit phải được kiểm tra. */
-	filter.FilterMode = CAN_FILTERMODE_IDMASK;
-	/* Sử dụng một filter 32 bit thay vì hai filter 16 bit. */
-	filter.FilterScale = CAN_FILTERSCALE_32BIT;
-
-	/*
-	* Đưa 11 bit Standard ID vào đúng vị trí của thanh ghi filter.
-	* Standard ID được dịch trái 5 bit theo định dạng bxCAN.
-	*/
-	filter.FilterIdHigh = (uint16_t)(std_id << 5);
-	filter.FilterIdLow = 0x0000U;
-
-	/*
-	* So sánh toàn bộ 11 bit Standard ID.
-	* Bit mask bằng 1 nghĩa là bit tương ứng phải khớp.
-	*/
-	filter.FilterMaskIdHigh = (uint16_t)(0x07FFU << 5);
-
-	/*
-	 * Bit 2 mask: IDE must be 0, standard frame.
-	 * Bit 1 mask: RTR must be 0, data frame.
-	 */
-	filter.FilterMaskIdLow = 0x0006U;
-	/* Chuyển các khung phù hợp với filter vào RX FIFO0. */
-	filter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
-	/* Kích hoạt filter sau khi cấu hình. */
-	filter.FilterActivation = ENABLE;
-	/* Gửi cấu hình filter xuống ngoại vi CAN. */
-	return HAL_CAN_ConfigFilter(&hcan, &filter);
-}
-
-/**
-* @brief Cấu hình các CAN ID mà gateway cần tiếp nhận.
-* Danh sách CAN ID vào các filter bank từ 0 đến 9.
-* Nếu có bất kỳ filter nào cấu hình thất bại, hàm dừng ngay và trả về
-* HAL_ERROR.
-* @return HAL_OK nếu toàn bộ filter được cấu hình thành công.
-*/
-static HAL_StatusTypeDef CAN_ConfigGatewayFilters(void)
-{
-	/* Bank 0: Trạng thái phương tiện - tốc độ, gear, nhiệt độ (Central ECU -> Qt). */
-	if (CAN_ConfigExactStdIdFilter(0U, CAN_ID_STATUS_VEHICLE_STATE) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 1: Trạng thái hệ thống đèn (Central ECU -> Qt). */
-	if (CAN_ConfigExactStdIdFilter(1U, CAN_ID_STATUS_LIGHTS_STATE) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 2: Trạng thái cần gạt nước (Central ECU -> Qt). */
-	if (CAN_ConfigExactStdIdFilter(2U, CAN_ID_STATUS_WIPERS_STATE) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 3: Trạng thái cốp xe (Central ECU -> Qt). */
-	if (CAN_ConfigExactStdIdFilter(3U, CAN_ID_STATUS_TRUNK_STATE) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 4: Lỗi từ Central ECU. */
-	if (CAN_ConfigExactStdIdFilter(4U, CAN_ID_ERROR_CENTRAL_ECU) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 5: Lỗi từ Front BCM. */
-	if (CAN_ConfigExactStdIdFilter(5U, CAN_ID_ERROR_FRONT_BCM) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 6: Lỗi từ Rear BCM. */
-	if (CAN_ConfigExactStdIdFilter(6U, CAN_ID_ERROR_REAR_BCM) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 7: Phản hồi chẩn đoán từ Central ECU. */
-	if (CAN_ConfigExactStdIdFilter(7U, CAN_ID_DIAG_RESPONSE) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 8: Heartbeat từ Central ECU. */
-	if (CAN_ConfigExactStdIdFilter(8U, CAN_ID_HEARTBEAT_CENTRAL) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	/* Bank 9: Blink tick đồng bộ đèn báo rẽ (Central ECU -> BCMs). */
-	if (CAN_ConfigExactStdIdFilter(9U, CAN_ID_BLINK_TICK) != HAL_OK)
-		{ return HAL_ERROR; }
-
-	return HAL_OK;
-}
-
-
-/*
-* @brief Tạo và gửi một CAN Standard Data Frame.
-* Hàm kiểm tra DLC và con trỏ dữ liệu trước khi gọi HAL.
-* @param std_id CAN Standard ID 11 bit.
-* @param data Dữ liệu cần truyền.
-* @param dlc Số byte dữ liệu từ 0 đến 8.
-* @return Trạng thái trả về từ HAL_CAN_AddTxMessage().
-*/
-static HAL_StatusTypeDef CAN_SendStandardFrame(uint16_t std_id, const uint8_t *data, uint8_t dlc)
-{
-	/* Header mô tả khung CAN cần truyền. */
-	CAN_TxHeaderTypeDef tx_header = {0};
-	uint32_t tx_mailbox;
-
-	/* Khung CAN chỉ cho phép tối đa 8 byte dữ liệu. */
-	if (dlc > 8U)
-		{
-			return HAL_ERROR;
-		}
-
-	/*
-	* Khi dlc lớn hơn 0, data phải trỏ đến vùng dữ liệu hợp lệ.
-	* Khi dlc bằng 0, data có thể bằng NULL.
-	*/
-	if ((data == NULL) && (dlc > 0U))
-		{
-			return HAL_ERROR;
-		}
-
-	/* Chỉ giữ lại 11 bit hợp lệ của Standard ID. */
-	tx_header.StdId = std_id & 0x07FFU;
-	tx_header.ExtId = 0U;
-	/* Chọn định dạng CAN Standard ID 11 bit. */
-	tx_header.IDE = CAN_ID_STD;
-	/* Chọn Data Frame, không phải Remote Frame. */
-	tx_header.RTR = CAN_RTR_DATA;
-	/* Thiết lập số byte dữ liệu trong khung CAN. */
-	tx_header.DLC = dlc;
-	tx_header.TransmitGlobalTime = DISABLE;
-
-	return HAL_CAN_AddTxMessage(&hcan, &tx_header, (uint8_t *)data, &tx_mailbox);
-}
 
 /* USER CODE END 0 */
 
@@ -277,81 +96,49 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN_Init();
   MX_USART1_UART_Init();
-  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-UART_SendString("\r\nCan-to-UART gateway starting...\r\n");
 
-if (CAN_ConfigGatewayFilters() != HAL_OK)
-{
-	UART_SendString("CAN filter configuration error\r\n");
-	Error_Handler();
-}
-if (HAL_CAN_Start(&hcan) != HAL_OK)
-{
-	UART_SendString("CAN start error\r\n");
-	Error_Handler();
-}
-if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_ERROR | CAN_IT_BUSOFF) != HAL_OK)
-{
-	UART_SendString("CAN notification error\r\n");
-	Error_Handler();
-}
+  UART_Protocol_SendString(
+      "\r\nBluePill CAN-UART Gateway starting\r\n"
+  );
 
-UART_SendString("CAN ready\r\n");
+  if (CAN_Gateway_Init() != HAL_OK)
+  {
+      UART_Protocol_SendString(
+          "ERR:GATEWAY_INIT\r\n"
+      );
+
+      Error_Handler();
+  }
+
+  if (UART_Protocol_Init() != HAL_OK)
+  {
+      UART_Protocol_SendString(
+          "ERR:UART_INIT\r\n"
+      );
+
+      Error_Handler();
+  }
+
+  UART_Protocol_SendString(
+      "READY:CAN=500K:UART=115200\r\n"
+  );
+
+  UART_Protocol_SendString(
+      "FORMAT:TX:ID:DLC:DATA\r\n"
+  );
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_Delay(100);
-	  /*
-	   * Loopback test - uncomment to verify CAN bus communication
-	  uint8_t vehicle_state_data[7] =
-	  {
-			  GEAR_PARK,          // Byte 0: Gear
-			  STATE_ENGINE_RUNNING,// Byte 1: State flags
-			  0x00,               // Byte 2: Speed high (0 km/h)
-			  0x00,               // Byte 3: Speed low
-			  0x00,               // Byte 4: RPM %
-			  ENCODE_TEMP(25),    // Byte 5: Coolant temp 25C
-			  ENCODE_VOLTAGE(12.6)// Byte 6: Battery 12.6V
-	  };
+	  UART_Protocol_Process();
 
-	  uint8_t lights_state_data[1] =
-	  {
-			  STATUS_HL_ACTIVE | STATUS_DRL_ACTIVE
-	  };
+	  CAN_Gateway_Process();
 
-	  uint8_t rear_sensors_data[4] =
-	  {
-			  0x00,               // Byte 0: Distance high (150 cm)
-			  0x96,               // Byte 1: Distance low
-			  0x00,               // Byte 2: Trunk hall (CLOSED)
-			  PARKING_CAUTION     // Byte 3: Proximity level
-	  };
-
-	  uint8_t error_data[5] =
-	  {
-			  DTC_SEVERITY_WARNING,                   // Byte 0: Severity
-			  UNPACK_HIGH_BYTE(DTC_B1021),            // Byte 1: DTC high
-			  UNPACK_LOW_BYTE(DTC_B1021),             // Byte 2: DTC low
-			  1U,                                     // Byte 3: Error counter
-			  NODE_ID_REAR_BCM                        // Byte 4: Source node
-	  };
-
-	  CAN_SendStandardFrame(CAN_ID_STATUS_VEHICLE_STATE, vehicle_state_data, 7U);
-	  HAL_Delay(300);
-
-	  CAN_SendStandardFrame(CAN_ID_STATUS_LIGHTS_STATE, lights_state_data, 1U);
-	  HAL_Delay(300);
-
-	  CAN_SendStandardFrame(CAN_ID_REPORT_REAR_SENSORS, rear_sensors_data, 4U);
-	  HAL_Delay(300);
-
-	  CAN_SendStandardFrame(CAN_ID_ERROR_REAR_BCM, error_data, 5U);
-	  HAL_Delay(300);
-	  */
+	  HAL_Delay(1);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -367,7 +154,6 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -397,59 +183,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
-/**
-  * @brief ADC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC1_Init(void)
-{
-
-  /* USER CODE BEGIN ADC1_Init 0 */
-
-  /* USER CODE END ADC1_Init 0 */
-
-  ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
-
-  /** Common config
-  */
-  hadc1.Instance = ADC1;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
-  hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
-  if (HAL_ADC_Init(&hadc1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Regular Channel
-  */
-  sConfig.Channel = ADC_CHANNEL_0;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN ADC1_Init 2 */
-
-  /* USER CODE END ADC1_Init 2 */
-
 }
 
 /**
@@ -538,141 +271,22 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-/**
-* @brief Callback khi RX FIFO0 có khung CAN đang chờ xử lý.
-* Hàm thực hiện:
-* 1. Kiểm tra callback có xuất phát từ CAN1 hay không.
-* 2. Lấy một khung từ RX FIFO0.
-* 3. Kiểm tra khung có phải Standard Data Frame hay không.
-* 4. Chuyển thông tin khung thành chuỗi ASCII.
-* 5. Gửi chuỗi qua UART1.
-* Chuỗi đầu ra có dạng: CAN ID=123 DLC=3 DATA=01 02 FF
-* @param phcan Con trỏ đến CAN handle đã phát sinh callback.
-*/
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
+void HAL_CAN_RxFifo0MsgPendingCallback(
+    CAN_HandleTypeDef *phcan)
 {
-	/* Header chứa CAN ID, DLC, IDE, RTR và các thuộc tính khác. */
-	CAN_RxHeaderTypeDef rx_header;
-	/* CAN hỗ trợ tối đa 8 byte dữ liệu. */
-	uint8_t rx_data[8];
-
-	/* Bộ đệm chứa chuỗi sẽ được gửi qua UART. */
-	char text[100];
-	/* Số ký tự hiện đang có trong bộ đệm text. */
-	int length;
-
-	/*
-	* Bỏ qua callback nếu nguồn phát sinh không phải CAN1.
-	* Việc kiểm tra này giúp hàm an toàn khi hệ thống có nhiều CAN controller.
-	*/
-	if (phcan->Instance != CAN1)
-		{
-			return;
-		}
-
-	/*
-	1071
-	* Đọc một khung từ CAN RX FIFO0.
-	* rx_header nhận thông tin header.
-	* rx_data nhận tối đa 8 byte payload.
-	*/
-	if (HAL_CAN_GetRxMessage(phcan, CAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK)
-		{
-			return;
-		}
-
-	/*
-	* Chỉ xử lý Standard Frame có ID 11 bit.
-	* Extended Frame bị bỏ qua.
-	*/
-	if (rx_header.IDE != CAN_ID_STD)
-		{
-			return;
-		}
-
-	/*
-	* Chỉ xử lý Data Frame.
-	* Remote Transmission Request Frame bị bỏ qua.
-	*/
-	if (rx_header.RTR != CAN_RTR_DATA)
-		{
-			return;
-		}
-
-	/*
-	1104
-	* Tạo phần đầu của thông báo.
-	* %03lx: In Standard ID ở dạng hexadecimal với ít nhất 3 chữ số.
-	* %lu: In DLC ở dạng số nguyên không dấu.
-	*/
-	length = snprintf(text, sizeof(text), "CAN ID=%03lx DLC=%lu DATA=", rx_header.StdId, rx_header.DLC);
-
-	/*
-	* snprintf() trả về:
-	* - Giá trị âm nếu có lỗi định dạng.
-	* - Số ký tự cần ghi, không bao gồm '\0'.
-	* Nếu giá trị trả về lớn hơn hoặc bằng kích thước bộ đệm, chuỗi đã bị cắt nên không tiếp tục xử lý.
-	*/
-	if ((length < 0) || ((size_t)length >= sizeof(text)))
-		{
-			return;
-		}
-
-	/*
-	* Thêm từng byte CAN vào chuỗi dưới dạng hexadecimal.
-	* Điều kiện i < 8U bảo vệ bộ đệm rx_data nếu DLC bất thường.
-	*/
-	for (uint32_t i = 0; (i < rx_header.DLC) && (i < 8U); i++)
-	{
-		int written = snprintf(&text[length], sizeof(text) - (size_t)length, "%02X ", rx_data[i]);
-		if (written < 0)
-			{
-				return;
-			}
-		if ((size_t)written >= (sizeof(text) - (size_t)length))
-			{
-				return;
-			}
-		length += written;
-	}
-
-	if (((size_t)length + 2U) >= sizeof(text))
-		{
-			return;
-		}
-
-	text[length++] = '\r';
-	text[length++] = '\n';
-	text[length] = '\0';
-
-	HAL_UART_Transmit(&huart1, (uint8_t *)text, (uint16_t)length, 100U);
+    CAN_Gateway_RxCallback(phcan);
 }
 
-/*
-* @brief Callback được gọi khi CAN phát sinh lỗi.
-* Hàm đọc mã lỗi CAN từ HAL, chuyển mã lỗi thành chuỗi hexadecimal và gửi chuỗi qua UART1.
-* Chuỗi đầu ra có dạng: CAN ERROR=0x00000001
-* @param phcan Con trỏ đến CAN handle đã phát sinh lỗi.
-*/
-void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *phcan)
+void HAL_CAN_ErrorCallback(
+    CAN_HandleTypeDef *phcan)
 {
-	char text[64];
-	int length;
-	uint32_t error_code;
+    CAN_Gateway_ErrorCallback(phcan);
+}
 
-	if (phcan->Instance != CAN1)
-		{
-			return;
-		}
-
-	error_code = HAL_CAN_GetError(phcan);
-
-	length = snprintf(text, sizeof(text), "CAN ERROR=0x%08lx\r\n", error_code);
-
-	if ((length > 0) && ((size_t)length < sizeof(text)))
-		{
-			HAL_UART_Transmit(&huart1, (uint8_t *)text, (uint16_t)length, 100U);
-		}
+void HAL_UART_RxCpltCallback(
+    UART_HandleTypeDef *huart)
+{
+    UART_Protocol_RxCallback(huart);
 }
 
 /* USER CODE END 4 */

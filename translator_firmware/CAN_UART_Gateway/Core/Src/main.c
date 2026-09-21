@@ -21,7 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "can_messages.h"
 #include "can_gateway.h"
 #include "uart_protocol.h"
 /* USER CODE END Includes */
@@ -33,8 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define UART_RX_BUFFER_SIZE 48U
-#define UART_INTERBYTE_TIMEOUT_MS 100U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/

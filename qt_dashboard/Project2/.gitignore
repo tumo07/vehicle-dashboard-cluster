@@ -13,3 +13,5 @@ Makefile
 *.obj
 .qmlcache/
 *_autogen/
+CMakeLists.txt.user
+CMakeLists.txt.user.*

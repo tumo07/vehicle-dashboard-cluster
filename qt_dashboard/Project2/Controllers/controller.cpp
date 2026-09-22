@@ -10,3 +10,8 @@ model* controller::getModel()
 {
     return &m_model;
 }
+
+DashboardModel *controller::getDashboardModel() const
+{
+    return m_dashboardModel;
+}

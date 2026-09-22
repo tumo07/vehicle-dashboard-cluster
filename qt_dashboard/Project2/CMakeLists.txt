@@ -49,6 +49,12 @@ qt_add_qml_module(appProject2
         ui/assets/unlock.png
         ui/assets/search.png
         SOURCES Models/dashboardmodel.h Models/dashboardmodel.cpp
+        QML_FILES ui/BottomBar/HVACComponenet.qml
+        RESOURCES
+        RESOURCES
+        QML_FILES ui/BottomBar/VolumeControlComponent.qml
+        RESOURCES ui/assets/0-volume-white.png ui/assets/1-volume-white.png ui/assets/2-volume-white.png ui/assets/3-volume-white.png
+        QML_FILES ui/LeftScreen/SpeedComponent.qml
 )
 
 target_include_directories(appProject2 PRIVATE

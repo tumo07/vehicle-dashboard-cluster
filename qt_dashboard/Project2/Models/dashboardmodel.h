@@ -14,20 +14,23 @@ class DashboardModel : public QObject
     Q_PROPERTY(QVariantMap data READ data NOTIFY dataChanged FINAL)
 
 public:
-    explicit DashboardModel(Service *service, QObject *parent = nullptr);
+    // explicit DashboardModel(Service *service, QObject *parent = nullptr);
+    explicit DashboardModel(QObject *parent = nullptr);
 
     QVariantMap data() const;
 
 signals:
     void dataChanged();
 
+public slots:
+    void processFrames(const Service::CanFrameList &frames);
+
 private:
     using Handler = bool (DashboardModel::*)(const Service::CanFrame &);
 
     void initHandlers();
-    void processFrames(const Service::CanFrameList &frames);
-    bool processFrame(const Service::CanFrame &frame);
 
+    bool processFrame(const Service::CanFrame &frame);
     bool updateCommandAck(const Service::CanFrame &frame);
     bool updateVehicle(const Service::CanFrame &frame);
     bool updateLights(const Service::CanFrame &frame);

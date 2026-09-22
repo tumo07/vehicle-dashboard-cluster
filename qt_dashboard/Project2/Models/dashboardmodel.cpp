@@ -1,8 +1,6 @@
 #include "dashboardmodel.h"
 
-DashboardModel::DashboardModel(
-    Service *service,
-    QObject *parent)
+DashboardModel::DashboardModel(QObject *parent)
     : QObject(parent)
 {
     /*
@@ -23,7 +21,7 @@ DashboardModel::DashboardModel(
         {"hazardActive", false},
         {"reverseActive", false},
 
-        {"speedKmh", 0},
+        {"speedKmh", 50},
         {"fuelPercent", 0},
         {"coolantTempC", 0},
         {"batteryVoltage", 0.0},
@@ -85,14 +83,7 @@ DashboardModel::DashboardModel(
         {"rearDtcActive", false}
     };
 
-    initHandlers();
-
-    connect(
-        service,
-        &Service::canFramesReceived,
-        this,
-        &DashboardModel::processFrames
-        );
+    initHandlers();    
 }
 
 QVariantMap DashboardModel::data() const

@@ -1,21 +1,25 @@
-# Smart Vehicle Dashboard Cluster
+# 🚘 CoreCAN Architecture: Smart Vehicle Dashboard Cluster
 
-This repository contains the complete firmware and software for a distributed, CAN-bus-based Smart Vehicle Dashboard Cluster simulator. It demonstrates a multi-MCU automotive architecture using the **CAN Bus v3.0 Protocol**.
+This monolithic repository (monorepo) contains the complete firmware, middleware, and frontend software for a distributed, CAN-bus-based Smart Vehicle Dashboard Cluster simulator. It demonstrates a multi-MCU automotive architecture implementing the **CAN Bus v3.0 Protocol (Central Coordinator Architecture)**.
 
-## Repository Structure
+## 🗂️ Repository Structure
 
-1. **`qt_dashboard/`** - PC UI Dashboard (C++ / Qt6 / QML). Connects to the bus via USB (UART).
-2. **`translator_firmware/`** - CAN to UART Bridge (STM32F103C8T6). Sniffs CAN frames and injects Qt commands.
-3. **`front_bcm_firmware/`** - Front Actuators & Lights (STM32F103C8T6).
-4. **`rear_bcm_firmware/`** - Rear Actuators, Trunk Servo, and Turn Signal Controller (STM32F103C8T6).
-5. **`main_mcu_firmware/`** - Central Sensor ECU & Error Aggregator (STM32F407VGT6 Discovery OR BluePill).
-6. **`can_messages_shared/`** - Shared CAN ID definitions, DLCs, and bitmasks used by all C/C++ projects.
+The project is segmented into 5 distinct computational nodes and 1 shared dictionary, enabling seamless team collaboration and strict boundaries via `.github/CODEOWNERS`:
+
+| Module | Node ID | Hardware | Description |
+| :--- | :---: | :--- | :--- |
+| **`qt_dashboard/`** | `N/A` | PC / Qt6 / QML | UI Dashboard. Renders real-time gauges, OBD-style DTC banners, and handles MQTT telemetry. |
+| **`translator_firmware/`** | `0x00` | STM32F103C8T6 | **CAN-UART Gateway:** Sniffs CAN frames, filters payload, and injects Qt commands into the bus. |
+| **`main_mcu_firmware/`** | `0x01` | STM32F407VGT6 | **Central ECU:** The brain of the network. Validates states, manages watchdogs, and aggregates faults. |
+| **`front_bcm_firmware/`** | `0x02` | STM32F103C8T6 | **Front BCM:** Executes headlight/wiper controls and reports front sensor metrics. |
+| **`rear_bcm_firmware/`** | `0x03` | STM32F103C8T6 | **Rear BCM:** Executes Smart Trunk sweep, reverse radar logic, and physical hardware routing. |
+| **`can_messages_shared/`** | `N/A` | C/C++ Header | Shared CAN ID dictionary, DLCs, and bitmasks defining the CAN V3.0 standard across all nodes. |
 
 ---
 
-## System Architecture & Data Flow
+## 🧠 System Architecture & Data Flow (V3.0)
 
-The system operates on a **Centralized Command Architecture**. The Central ECU is the brain of the network. The Front and Rear BCMs (Body Control Modules) act as "dumb actuators" that simply report button presses and execute commands sent by the Central ECU.
+The system operates on a **Strict Centralized Command Architecture**. The Central ECU is the sole decision-maker. The Front and Rear Body Control Modules (BCMs) act as "dumb actuators" that report physical interrupts and execute heavily validated commands sent by the Central ECU.
 
 ### Architecture Flowchart
 
@@ -26,52 +30,100 @@ flowchart TD
     end
 
     subgraph Bridge
-        TR[Translator BluePill]
+        TR[Translator Node 0x00]
     end
     
     subgraph CAN Bus Network
-        CECU{Central ECU \n STM32F407}
-        FBCM[Front BCM \n STM32F1]
-        RBCM[Rear BCM \n STM32F1]
+        CECU{Central ECU \n Node 0x01}
+        FBCM[Front BCM \n Node 0x02]
+        RBCM[Rear BCM \n Node 0x03]
     end
 
     %% Connections
     Qt <-->|USB / UART| TR
-    TR <-->|CAN Bus| CECU
-    CECU <-->|CAN Bus| FBCM
-    CECU <-->|CAN Bus| RBCM
+    TR <-->|CAN Bus 500kbps| CECU
+    CECU <-->|CAN Bus 500kbps| FBCM
+    CECU <-->|CAN Bus 500kbps| RBCM
 
     %% Interactions
     TR -.->|0x100-0x104 Commands| CECU
     TR -.->|0x300-0x305 Status Updates| Qt
     
-    RBCM -.->|0x410 Rear Status \n Button Presses| CECU
-    CECU -.->|0x210 Arm Turn \n 0x130 Tick| RBCM
-    CECU -.->|0x200 Lights \n 0x201 Wipers| FBCM
-```
+    RBCM -.->|0x410 Status / 0x411 Sensors| CECU
+    CECU -.->|0x210 Turn Arming / 0x130 Sync Tick| RBCM
+    CECU -.->|0x200 Lights / 0x201 Wipers| FBCM
+    📡 Protocol Overview
+To prevent bus collisions and guarantee deterministic real-time behavior, CAN IDs are strictly categorized by priority and direction:
+
+GROUP A (0x100 - 0x10F): UI Commands (Qt -> Central ECU). Triggered by user interaction.
+
+GROUP B (0x200 - 0x21F): Execution Commands (Central ECU -> BCMs). Approved and state-validated commands driving actuator pins.
+
+GROUP C (0x300 - 0x30F): Status Updates (Central ECU -> Qt). Real-time telemetry (Speed, Fuel, Gear).
+
+GROUP D (0x400 - 0x41F): BCM Reports (BCMs -> Central ECU). Physical inputs and raw sensor data.
+
+GROUP E/F (0x500 - 0x61F): Diagnostics & Faults. OBD-style DTC (Diagnostic Trouble Codes) propagation.
+
+GROUP G (0x700 - 0x720): Heartbeats. Sent at 1Hz - 5Hz. The Central ECU flags a DTC_C100X network fault if a node drops.
+
+⚡ Hardware Pivot Highlight: Turn Signal Sync
+To guarantee perfect 1:1 synchronization between physical LEDs and the software UI without latency, the system utilizes a Hardware Pivot logic:
+
+Input: Driver presses the turn stalk wired to the Rear BCM.
+
+Report: Rear BCM blindly reports the physical state via 0x410.
+
+Process: Central ECU validates the input against Hazard states and issues an authorization bitmask via CAN_ID_EXEC_REAR_TURN (0x210).
+
+Sync & Execute: Central ECU broadcasts a global 0x130 Blink Tick every 500ms. Upon receiving this tick, the Rear BCM hardware toggles the LEDs, while the Qt Dashboard simultaneously toggles the UI arrow.
+
+🤝 Collaboration & Code Review
+Pull Requests are required for merging into main. The .github/CODEOWNERS configuration ensures that the respective module owner is automatically requested for a code review before any integration.
+
 
 ---
 
-## Protocol Overview (CAN v3.0)
+### 2. File `README.md` dành riêng cho thư mục của bạn (`rear_bcm_firmware/`)
+*Bạn tạo một file `README.md` mới tinh nằm ngay bên trong thư mục `rear_bcm_firmware` và dán đoạn này vào:*
 
-Messages are strictly divided into priority groups to prevent bus collisions:
+```markdown
+# 🚘 Rear BCM Firmware (Node 0x03)
 
-*   **GROUP A (`0x100 - 0x10F`)**: UI Commands (Qt -> Central ECU). E.g., User presses headlight button on GUI.
-*   **GROUP B (`0x200 - 0x21F`)**: Execution Commands (Central ECU -> BCMs). The Central ECU tells BCMs what physical pins to turn on.
-*   **GROUP C (`0x300 - 0x30F`)**: Status Updates (Central ECU -> Qt). Real-time gauge data (Speed, Fuel, Gear).
-*   **GROUP D (`0x400 - 0x41F`)**: BCM Reports (BCMs -> Central ECU). BCMs report physical button presses and sensor data (e.g., Radar distance).
-*   **GROUP E/F (`0x500 - 0x61F`)**: Diagnostics & Faults.
-*   **GROUP G (`0x700 - 0x720`)**: Heartbeats. Every node broadcasts a 1Hz heartbeat. If a heartbeat drops, the Central ECU flags a node fault.
+This module contains the firmware for the **Rear Body Control Module (Rear BCM)**, built on the STM32F103C8T6 (Blue Pill) micro-controller. 
 
----
+Operating under the **CAN V3.0 Central Coordinator Architecture**, this node acts as an intelligent peripheral that processes high-frequency sensor acquisitions locally and relies on the Central ECU for execution authorization.
 
-## Hardware Pivot: Turn Signal Routing
+## 🎯 Key Features & Algorithms
 
-Due to physical test-rig constraints, the physical turn signal stalks (buttons) and the LED blinkers (front and rear) are all wired to the **Rear BCM**. The logic flow for turn signals works as follows to guarantee perfect UI synchronization:
+*   **Smart Kick-to-Open Trunk:** Integrates an HC-SR04 ultrasonic sensor with a 2-second debounce filter (`foot_in_zone` logic) to prevent false triggers. The mechanical movement is executed via a Non-blocking PWM Sweep algorithm, simulating a smooth 2-second power-liftgate sequence.
+*   **Reverse Parking Radar (Multi-stage Warning):** Dynamically categorizes ultrasonic readings into `PARKING_CLEAR`, `CAUTION`, `WARNING`, and `CRITICAL` levels, driving a local buzzer and transmitting encoded states to the Central ECU for dashboard visualization.
+*   **Hardware Pivot Turn Signals:** Implements remote-armed blinking logic. It listens for physical inputs, reports them (`0x410`), awaits execution masks from the Central ECU (`0x210`), and toggles LEDs strictly synced to the global `0x130` Blink Tick.
+*   **Safety Watchdog:** Broadcasts a rolling-counter heartbeat (`0x720`) at 5Hz to maintain link integrity with the Central ECU.
 
-1. **Input:** The driver presses the left turn signal button physically wired to the **Rear BCM**.
-2. **Report:** The Rear BCM transmits `CAN_ID_REPORT_REAR_STATUS` (`0x410`) with the `REAR_ACT_LTURN` bit set.
-3. **Brain Processing:** The Central ECU receives `0x410`, registers the driver's intent, and evaluates safety overrides (e.g., Hazards).
-4. **Arming:** The Central ECU transmits `CAN_ID_EXEC_REAR_TURN` (`0x210`) with `EXEC_TURN_LEFT_ARM`, telling the Rear BCM it is authorized to blink.
-5. **Synchronization:** The Central ECU broadcasts the `CAN_ID_BLINK_TICK` (`0x130`) every 500ms.
-6. **Execution:** Upon receiving `0x130`, the Rear BCM toggles its LEDs. Simultaneously, the Qt Dashboard receives `CAN_ID_STATUS_TURN_BLINK` (`0x302`) and toggles the UI arrow, achieving perfect 1:1 hardware/software sync.
+## 🔌 Hardware Pinout (STM32F103C8T6)
+
+| Pin | Type | Function |
+| :--- | :---: | :--- |
+| **PA0** | `Input` | Brake Pedal Switch |
+| **PA1** | `Input` | Trunk Manual Switch |
+| **PA4** | `Input` | Reverse Gear Simulation |
+| **PA5 / PA6** | `Input` | Turn Signal Stalk (Left / Right) |
+| **PA2** | `Output` | Parking Radar Buzzer (Low-level trigger) |
+| **PB0** | `Output` | Dedicated Brake LED |
+| **PB1 / PB3** | `Output` | Turn Signal LEDs (Left / Right) |
+| **PB6** | `PWM` | SG90 Trunk Servo (TIM4 CH1) |
+| **PB12 / PB13**| `GPIO` | HC-SR04 Trigger / Echo (Timed via TIM3) |
+| **PB8 / PB9** | `CAN1` | RX / TX (AFIO Remap 2) |
+
+## 📡 Node 0x03 CAN Dictionary
+
+### Transmitting (TX)
+*   `0x410` (DLC: 3) - **REPORT_REAR_STATUS**: Button states (Brake, Turn), Trunk motor motion state, and Opening percentage.
+*   `0x411` (DLC: 4) - **REPORT_REAR_SENSORS**: Packed 16-bit ultrasonic distance (cm), Trunk Hall-effect state, and calculated Parking Level.
+*   `0x720` (DLC: 2) - **HEARTBEAT_REAR_BCM**: Rolling counter and hardware health bitmask.
+
+### Receiving (RX) - Interrupt Driven
+*   `0x210` (DLC: 1) - **EXEC_REAR_TURN**: Arming mask from Central ECU (Left, Right, Hazard).
+*   `0x211` (DLC: 1) - **EXEC_REAR_TRUNK**: Remote trunk commands (Open/Close from Qt).
+*   `0x130` (DLC: 1) - **BLINK_TICK**: Global 500ms synchronization pulse.

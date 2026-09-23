@@ -1,4 +1,7 @@
 #include "dashboardmodel.h"
+#include <QDebug>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 DashboardModel::DashboardModel(QObject *parent)
     : QObject(parent)
@@ -170,6 +173,16 @@ void DashboardModel::processFrames(
     {
         if (processFrame(frame))
             changed = true;
+
+            qDebug().noquote()
+                << "[DECODED FRAME]"
+                << "ID:"
+                << QString("0x%1")
+                       .arg(frame.id, 3, 16, QChar('0'))
+                       .toUpper()
+                << "\n"
+                << QJsonDocument::fromVariant(m_data)
+                       .toJson(QJsonDocument::Indented);
     }
 
     /*

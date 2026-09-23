@@ -32,6 +32,18 @@ Rectangle {
         height: parent.height * 0.85
         hvacController: controller.modelPassenger
     }
+    InfoComponenet {
+        id: centerBar
+        anchors {
+            left: driverHvacComponent.right
+            right: passengerHvacComponent.left
+            top: parent.top
+            bottom: parent.bottom
+
+            leftMargin: 300
+            rightMargin: 30
+        }
+    }
     HVACComponenet {
         id: passengerHvacComponent
         anchors {

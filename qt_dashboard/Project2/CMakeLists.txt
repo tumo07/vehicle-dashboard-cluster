@@ -55,6 +55,8 @@ qt_add_qml_module(appProject2
         QML_FILES ui/BottomBar/VolumeControlComponent.qml
         RESOURCES ui/assets/0-volume-white.png ui/assets/1-volume-white.png ui/assets/2-volume-white.png ui/assets/3-volume-white.png
         QML_FILES ui/LeftScreen/SpeedComponent.qml
+        QML_FILES ui/BottomBar/InfoComponenet.qml
+        RESOURCES ui/assets/abs-off.png ui/assets/abs-on.png ui/assets/fuel.png ui/assets/fuel1.png ui/assets/hand_warning_light.png ui/assets/hand_warning2.png ui/assets/highbeam-off.png ui/assets/highbeam-on.png ui/assets/lowbeam-off.png ui/assets/lowbeam-on.png ui/assets/turn-left-off.png ui/assets/turn-left-on.png ui/assets/turn-right-off.png ui/assets/turn-right-on.png ui/assets/wiper-off.png ui/assets/wiper-on.png
 )
 
 target_include_directories(appProject2 PRIVATE

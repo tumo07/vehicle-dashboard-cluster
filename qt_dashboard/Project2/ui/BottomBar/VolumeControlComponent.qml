@@ -46,7 +46,9 @@ Item {
         MouseArea {
             anchors.fill: parent
             onClicked: {
-                controller.model.setVolumeLevel(0)
+                controller.model.setVolumeLevel(
+                    controller.model.volumeLevel === 0 ? 50 : 0
+                )
             }
         }
     }

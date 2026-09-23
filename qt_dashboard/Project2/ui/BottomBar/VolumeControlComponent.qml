@@ -40,8 +40,8 @@ Item {
                   : controller.model.volumeLevel <= 50
                     ? "../assets/2-volume-white.png"
                     : "../assets/3-volume-white.png"
-        width: 30
-        height: 30
+        width: 25
+        height: 25
         fillMode: Image.PreserveAspectFit
         MouseArea {
             anchors.fill: parent

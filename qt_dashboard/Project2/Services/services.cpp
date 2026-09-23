@@ -1,5 +1,5 @@
 #include "services.h"
-
+#include <QDebug>
 #include <QIODevice>
 
 Service::Service(QObject *parent)
@@ -26,10 +26,11 @@ Service::Service(QObject *parent)
 
 bool Service::open()
 {
-    if (m_serial.isOpen())
+    if (m_serial.isOpen()){
         return true;
+    }
 
-    m_serial.setPortName("/dev/ttyUSB0");
+    m_serial.setPortName("COM5");
 
     m_serial.setBaudRate(
         QSerialPort::Baud115200
@@ -51,8 +52,12 @@ bool Service::open()
         QSerialPort::NoFlowControl
         );
 
-    if (!m_serial.open(QIODevice::ReadOnly))
+    if (!m_serial.open(QIODevice::ReadOnly)){
+        qWarning() << "[UART] Open failed:"
+                   << m_serial.portName()
+                   << m_serial.errorString();
         return false;
+    }
 
     m_rxBuffer.clear();
     m_pendingFrames.clear();
@@ -123,6 +128,14 @@ void Service::onReadyRead()
 
         if (!parseCanFrame(line, frame))
             continue;
+
+        qDebug().noquote()
+            << "[UART RX]"
+            << "ID:" << QString("0x%1")
+                            .arg(frame.id, 3, 16, QChar('0'))
+                            .toUpper()
+            << "DLC:" << static_cast<int>(frame.dlc)
+            << "DATA:" << frame.data.toHex(' ').toUpper();
 
         /*
          * Bounded queue.

@@ -520,6 +520,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
             break;
         case CAN_ID_REPORT_REAR_STATUS:
             if (dlc >= 3U) {
+                /* 1. Trunk status parsing */
                 g_veh.trunk_state = (TrunkMotorState_t)d[1];
                 g_veh.trunk_pct   = d[2];
                 if (g_veh.trunk_state == TRUNK_IDLE && g_veh.trunk_pct == 0U)
@@ -527,6 +528,17 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                 else
                     g_veh.state_flags |= STATE_TRUNK_AJAR;
                 Broadcast_TrunkState();
+
+                /* 2. Turn Signal inputs from Rear BCM (hardware pivot) */
+                if (g_veh.turn_armed != CMD_TURN_HAZARD) {
+                    if (d[0] & REAR_ACT_LTURN) {
+                        if (g_veh.turn_armed != CMD_TURN_LEFT) Execute_TurnCmd(CMD_TURN_LEFT);
+                    } else if (d[0] & REAR_ACT_RTURN) {
+                        if (g_veh.turn_armed != CMD_TURN_RIGHT) Execute_TurnCmd(CMD_TURN_RIGHT);
+                    } else {
+                        if (g_veh.turn_armed != CMD_TURN_OFF) Execute_TurnCmd(CMD_TURN_OFF);
+                    }
+                }
             }
             break;
         case CAN_ID_REPORT_REAR_SENSORS:

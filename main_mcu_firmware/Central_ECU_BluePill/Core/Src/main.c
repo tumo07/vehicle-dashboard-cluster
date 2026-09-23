@@ -1,4 +1,4 @@
-﻿/* USER CODE BEGIN Header */
+/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : main.c
@@ -979,6 +979,17 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                     g_vehicle.state_flags |= STATE_TRUNK_AJAR;
                 }
                 Broadcast_TrunkState();
+                
+                /* Turn Signal inputs from Rear BCM (hardware pivot) */
+                if (g_vehicle.turn_armed != CMD_TURN_HAZARD) {
+                    if (rx_data[0] & REAR_ACT_LTURN) {
+                        if (g_vehicle.turn_armed != CMD_TURN_LEFT) Execute_TurnCmd(CMD_TURN_LEFT);
+                    } else if (rx_data[0] & REAR_ACT_RTURN) {
+                        if (g_vehicle.turn_armed != CMD_TURN_RIGHT) Execute_TurnCmd(CMD_TURN_RIGHT);
+                    } else {
+                        if (g_vehicle.turn_armed != CMD_TURN_OFF) Execute_TurnCmd(CMD_TURN_OFF);
+                    }
+                }
             }
             break;
         case CAN_ID_REPORT_REAR_SENSORS:

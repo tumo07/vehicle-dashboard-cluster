@@ -20,9 +20,11 @@ TIM_HandleTypeDef htim4; // Dùng cho Servo Cốp xe (PB6)
 CAN_TxHeaderTypeDef TxHeader;
 uint32_t TxMailbox;
 uint8_t TxData[8];
+// ----- BIẾN LƯU LỆNH TỪ CENTRAL ECU -----
+volatile uint8_t exec_rear_turn_mask = 0;
 // ----- BIẾN CHO CỐP XE -----
 uint32_t last_kick_time = 0;
-uint8_t trunk_state = 0;     // 0 = Cốp đóng, 1 = Cốp mở[cite: 1, 2]
+uint8_t trunk_state = 0;     // 0 = Cốp đóng, 1 = Cốp mở
 uint8_t foot_in_zone = 0;    // Cờ chống nhận diện liên tục khi để tay lâu
 
 // Biến cho thuật toán chạy Servo mượt (Sweep)
@@ -96,7 +98,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   // Khởi động Timer
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, 500); // 1.0ms - Mặc định Cốp đóng[cite: 2]
+  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, 500); // 1.0ms - Mặc định Cốp đóng
   HAL_TIM_Base_Start(&htim3); // Bật TIM3 chạy ngầm cho HC-SR04
 
   // Cấu hình Bộ lọc CAN
@@ -119,20 +121,20 @@ int main(void)
   while (1)
   {
       /* 1. ĐỌC TÍN HIỆU NGÕ VÀO VẬT LÝ */
-      brake_pedal = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);  // Bàn đạp phanh[cite: 2]
-      trunk_switch = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1); // Công tắc cốp[cite: 2]
+      brake_pedal = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);  // Bàn đạp phanh
+      trunk_switch = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1); // Công tắc cốp
       is_reversing = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4); // Nút giả lập Số Lùi
       left_turn = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_5);    // Nút giả lập Xi-nhan Trái
       right_turn = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6);   // Nút giả lập Xi-nhan Phải
 
       /* 2. ĐIỀU KHIỂN ĐÈN PHANH / XI-NHAN (KIỂU MỸ) */
       if (brake_pedal == GPIO_PIN_SET) {
-          // Bật đèn phanh độc lập (nếu có gắn)[cite: 2]
+          // Bật đèn phanh độc lập (nếu có gắn)
           HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 
           // Ép cả 2 đèn xi-nhan sáng rực để làm đèn phanh
-          HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET); // Xi-nhan Trái (PB1)[cite: 2]
-          HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // Xi-nhan Phải (PB3)[cite: 2]
+          HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET); // Xi-nhan Trái (PB1)
+          HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // Xi-nhan Phải (PB3)
       } else {
           // Tắt đèn phanh độc lập
           HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
@@ -196,7 +198,7 @@ int main(void)
                         if (current_servo_pwm < target_servo_pwm) current_servo_pwm = target_servo_pwm;
                     }
 
-                    // Bơm từ từ độ rộng xung ra chân PB6[cite: 1, 2]
+                    // Bơm từ từ độ rộng xung ra chân PB6
                     __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, current_servo_pwm);
                     last_servo_move = current_time;
                 }
@@ -205,9 +207,7 @@ int main(void)
             /* 4. TRUYỀN GÓI TIN CAN CHUẨN ĐỒ ÁN V3.0 (CHU KỲ 200ms) */
                         if (current_time - last_can_tx >= 200) {
 
-                            // =========================================================
                             // GÓI 1: 0x410 - TRẠNG THÁI NÚT BẤM & ĐỘNG CƠ CỐP
-                            // =========================================================
                             TxHeader.StdId = CAN_ID_REPORT_REAR_STATUS; // Tự động lấy 0x410
                             TxHeader.ExtId = 0x01;
                             TxHeader.RTR = CAN_RTR_DATA;
@@ -232,9 +232,7 @@ int main(void)
 
                             HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
 
-                            // =========================================================
                             // GÓI 2: 0x411 - KHOẢNG CÁCH SIÊU ÂM (Gửi 4 Byte)
-                            // =========================================================
                             TxHeader.StdId = CAN_ID_REPORT_REAR_SENSORS; // Tự động lấy 0x411
                             TxHeader.DLC = 4; // DLC Mới là 4 Byte
 
@@ -420,18 +418,23 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     // Đọc gói tin từ trong hòm thư (FIFO0) ra
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
     {
-        // 1. Xử lý gói tin Nhịp Chớp (0x130)
+        // 1. Nhận nhịp chớp đồng bộ từ Central ECU (0x130)
         if (RxHeader.StdId == CAN_ID_BLINK_TICK)
         {
-            // Nếu nút Xi-nhan trái đang nhấn -> Đảo trạng thái LED Trái (Chớp tắt)
-            if (left_turn == 1) HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
-            else HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+            // Nháy xi-nhan TRÁI dựa vào lệnh của Main ECU (Trái hoặc Hazard)
+            if ((exec_rear_turn_mask & EXEC_TURN_LEFT_ARM) || (exec_rear_turn_mask & EXEC_TURN_HAZARD_ARM))
+                HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
+            else
+                HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
 
-            // Nếu nút Xi-nhan phải đang nhấn -> Đảo trạng thái LED Phải (Chớp tắt)
-            if (right_turn == 1) HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
-            else HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+            // Nháy xi-nhan PHẢI dựa vào lệnh của Main ECU (Phải hoặc Hazard)
+            if ((exec_rear_turn_mask & EXEC_TURN_RIGHT_ARM) || (exec_rear_turn_mask & EXEC_TURN_HAZARD_ARM))
+                HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+            else
+                HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
         }
-        // 2. Nhận lệnh điều khiển cốp từ Central ECU (0x211) gửi xuống (TÁCH BIỆT KHỎI NHỊP CHỚP)
+
+        // 2. Nhận lệnh điều khiển CỐP từ Central ECU (0x211)
         else if (RxHeader.StdId == CAN_ID_EXEC_REAR_TRUNK)
         {
             if (RxData[0] == CMD_TRUNK_OPEN)
@@ -444,6 +447,12 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
                 trunk_state = 0;
                 target_servo_pwm = 500;  // Đóng 0 độ
             }
+        }
+
+        // 3. Nhận lệnh điều khiển XI-NHAN/HAZARD từ Central ECU (0x210)
+        else if (RxHeader.StdId == CAN_ID_EXEC_REAR_TURN)
+        {
+            exec_rear_turn_mask = RxData[0]; // Lưu lại bitmask Main ECU gửi để nháy ở (1)
         }
     }
 }

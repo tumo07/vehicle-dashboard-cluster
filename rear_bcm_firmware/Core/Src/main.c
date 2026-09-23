@@ -251,6 +251,13 @@ int main(void)
                             HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
 
                             last_can_tx = current_time;
+                            // GÓI 3: 0x720 - REAR BCM HEARTBEAT
+                            TxHeader.StdId = CAN_ID_HEARTBEAT_REAR_BCM;
+                            TxHeader.DLC = 2;
+                            static uint8_t hb_counter = 0;
+                            TxData[0] = hb_counter++; // Tăng dần mỗi chu kỳ để báo trạng thái hoạt động liên tục
+                            TxData[1] = HB_INIT_OK | HB_CAN_OK | HB_SENSORS_OK;
+                            HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
                         }
   }
 }
@@ -413,8 +420,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     // Đọc gói tin từ trong hòm thư (FIFO0) ra
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
     {
-        // Kiểm tra xem có đúng là gói tin Nhịp Chớp (0x130) từ Nucleo không
-        if (RxHeader.StdId == 0x130)
+        // 1. Xử lý gói tin Nhịp Chớp (0x130)
+        if (RxHeader.StdId == CAN_ID_BLINK_TICK)
         {
             // Nếu nút Xi-nhan trái đang nhấn -> Đảo trạng thái LED Trái (Chớp tắt)
             if (left_turn == 1) HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
@@ -423,6 +430,20 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
             // Nếu nút Xi-nhan phải đang nhấn -> Đảo trạng thái LED Phải (Chớp tắt)
             if (right_turn == 1) HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
             else HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+        }
+        // 2. Nhận lệnh điều khiển cốp từ Central ECU (0x211) gửi xuống (TÁCH BIỆT KHỎI NHỊP CHỚP)
+        else if (RxHeader.StdId == CAN_ID_EXEC_REAR_TRUNK)
+        {
+            if (RxData[0] == CMD_TRUNK_OPEN)
+            {
+                trunk_state = 1;
+                target_servo_pwm = 2500; // Mở 180 độ
+            }
+            else if (RxData[0] == CMD_TRUNK_CLOSE)
+            {
+                trunk_state = 0;
+                target_servo_pwm = 500;  // Đóng 0 độ
+            }
         }
     }
 }

@@ -205,8 +205,35 @@ static HAL_StatusTypeDef CAN_Send(uint16_t id, const uint8_t *data, uint8_t dlc)
 /* ── Sensor update (called in TIM6 100ms ISR) ────────────────────────────── */
 static void Update_Sensors(void)
 {
-    g_veh.speed_kmh = (uint16_t)((adc_buf[0] * 150UL) / 4095UL);
-    g_veh.fuel_pct  = (uint8_t) ((adc_buf[1] * 100UL) / 4095UL);
+    /* 1. Rotary Gear Selector from Potentiometer 2 (PA2) */
+    uint16_t raw_gear = adc_buf[1];
+    if (raw_gear < 820U) {
+        g_veh.gear = GEAR_PARK;     /* 0%  - 20%: P (Park) */
+    } else if (raw_gear < 1640U) {
+        g_veh.gear = GEAR_REVERSE;  /* 20% - 40%: R (Reverse) */
+    } else if (raw_gear < 2460U) {
+        g_veh.gear = GEAR_NEUTRAL;  /* 40% - 60%: N (Neutral) */
+    } else if (raw_gear < 3280U) {
+        g_veh.gear = GEAR_DRIVE;    /* 60% - 80%: D (Drive) */
+    } else {
+        g_veh.gear = GEAR_SPORT;    /* 80% - 100%: S (Sport) */
+    }
+
+    /* 2. Fuel level fixed at 85% */
+    g_veh.fuel_pct = 85U;
+
+    /* 3. Speed calculation from Potentiometer 1 (PA1) based on active Gear */
+    uint16_t pot_speed = (uint16_t)((adc_buf[0] * 150UL) / 4095UL);
+    if (g_veh.gear == GEAR_PARK || g_veh.gear == GEAR_NEUTRAL) {
+        /* Park & Neutral: vehicle wheels are locked / disengaged */
+        g_veh.speed_kmh = 0U;
+    } else if (g_veh.gear == GEAR_REVERSE) {
+        /* Reverse: speed capped at 40 km/h */
+        g_veh.speed_kmh = (uint16_t)((adc_buf[0] * 40UL) / 4095UL);
+    } else {
+        /* Drive (D) & Sport (S): full speed range 0-150 km/h */
+        g_veh.speed_kmh = pot_speed;
+    }
 
     if (g_veh.speed_kmh > 0U)
         g_veh.state_flags |=  STATE_VEHICLE_MOVING;
@@ -217,6 +244,7 @@ static void Update_Sensors(void)
         g_veh.state_flags |=  STATE_REVERSE_ACTIVE;
     else
         g_veh.state_flags &= ~STATE_REVERSE_ACTIVE;
+
 
     /* Speed zone LEDs (Green is strictly reserved for CAN RX now) */
     // Orange LED for 0-60 km/h (replaced Green)

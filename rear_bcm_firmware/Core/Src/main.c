@@ -34,7 +34,9 @@ uint32_t last_servo_move = 0;
 // Biến trạng thái vật lý
 volatile uint8_t brake_pedal = 0;
 volatile uint8_t trunk_switch = 0;
+uint8_t last_trunk_switch = 0;
 volatile uint8_t is_reversing = 0;
+volatile uint8_t central_is_reversing = 0;
 volatile uint8_t left_turn = 0;
 volatile uint8_t right_turn = 0;
 
@@ -82,6 +84,24 @@ uint16_t HCSR04_Read(void) {
 
     // Công thức: Khoảng cách (cm) = Thời gian (us) / 58
     return local_time / 58;
+}
+
+// Hàm gửi yêu cầu điều khiển CỐP lên Central ECU (CAN ID 0x103)
+void Rear_RequestTrunkAction(CmdTrunk_t req_cmd) {
+    CAN_TxHeaderTypeDef reqHeader;
+    uint32_t reqMailbox;
+    uint8_t reqData[1];
+
+    reqHeader.StdId = CAN_ID_CMD_TRUNK_CONTROL; // 0x103
+    reqHeader.ExtId = 0x00;
+    reqHeader.RTR   = CAN_RTR_DATA;
+    reqHeader.IDE   = CAN_ID_STD;
+    reqHeader.DLC   = 1;
+    reqHeader.TransmitGlobalTime = DISABLE;
+
+    reqData[0] = (uint8_t)req_cmd;
+
+    HAL_CAN_AddTxMessage(&hcan, &reqHeader, reqData, &reqMailbox);
 }
 /* USER CODE END 0 */
 
@@ -145,108 +165,119 @@ int main(void)
       }
 
       /* 3. LOGIC CẢM BIẾN LÙI VÀ ĐÁ CỐP THÔNG MINH */
-            uint32_t current_time = HAL_GetTick();
-            distance_cm = HCSR04_Read();
+      uint32_t current_time = HAL_GetTick();
+      distance_cm = HCSR04_Read();
 
-            if (is_reversing == 1) {
-                // --- NGỮ CẢNH 1: ĐANG LÙI XE (PARKING SENSOR) ---
-                if (distance_cm > 0 && distance_cm <= 20) {
-                    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
-                }
-                else if (distance_cm > 20 && distance_cm <= 100) {
-                    uint32_t beep_interval = distance_cm * 5;
-                    if (current_time - last_beep_time >= beep_interval) {
-                        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);
-                        last_beep_time = current_time;
-                    }
-                }
-                else {
-                    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
-                }
-            }
-            else {
-                // --- NGỮ CẢNH 2: SMART KICK TRUNK ---
-                HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
+      uint8_t effective_reversing = is_reversing || central_is_reversing;
 
-                if (distance_cm > 2 && distance_cm <= 15) {
-                    // CHỐNG NHIỄU: Chỉ nhận diện khi rút tay ra rồi mới đưa vào lại (foot_in_zone == 0)
-                    if (foot_in_zone == 0 && (current_time - last_kick_time > 2000)) {
-                        trunk_state = !trunk_state;
+      if (effective_reversing == 1) {
+          // --- NGỮ CẢNH 1: ĐANG LÙI XE (PARKING SENSOR) ---
+          if (distance_cm > 0 && distance_cm <= 20) {
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
+          }
+          else if (distance_cm > 20 && distance_cm <= 100) {
+              uint32_t beep_interval = distance_cm * 5;
+              if (current_time - last_beep_time >= beep_interval) {
+                  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);
+                  last_beep_time = current_time;
+              }
+          }
+          else {
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
+          }
+      }
+      else {
+          // --- NGỮ CẢNH 2: SMART KICK TRUNK (CHỈ GỬI REQUEST, KHÔNG TỰ QUAY SERVO) ---
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
 
-                        // Chỉ gán MỤC TIÊU quay (Target), không xuất lệnh quay ngay lập tức
-                        target_servo_pwm = (trunk_state == 1) ? 2500 : 500; // 2500 = 180 độ, 500 = 0 độ
+          if (distance_cm > 2 && distance_cm <= 15) {
+              // CHỐNG NHIỄU: Chỉ nhận diện khi rút chân/tay ra rồi mới đưa vào lại (foot_in_zone == 0)
+              if (foot_in_zone == 0 && (current_time - last_kick_time > 2000)) {
+                  // Gửi yêu cầu đóng/mở cốp lên Central ECU (0x103) để Central ECU xét duyệt an toàn
+                  Rear_RequestTrunkAction(trunk_state == 1 ? CMD_TRUNK_CLOSE : CMD_TRUNK_OPEN);
+                  foot_in_zone = 1;
+                  last_kick_time = current_time;
+              }
+          } else {
+              foot_in_zone = 0;
+          }
+      }
 
-                        foot_in_zone = 1; // Khóa cờ, xác nhận tay đang nằm trong vùng
-                        last_kick_time = current_time;
-                    }
-                } else {
-                    // Khi người dùng rút tay ra khỏi khoảng 15cm -> Mở khóa cờ
-                    foot_in_zone = 0;
-                }
-            }
+      // --- NÚT BẤM CỐP VẬT LÝ TRÊN XE (PA1) ---
+      if (trunk_switch == GPIO_PIN_SET && last_trunk_switch == GPIO_PIN_RESET) {
+          // Khi bấm nút mở cốp vật lý -> Gửi yêu cầu lên Central ECU phê duyệt (0x103)
+          Rear_RequestTrunkAction(trunk_state == 1 ? CMD_TRUNK_CLOSE : CMD_TRUNK_OPEN);
+      }
+      last_trunk_switch = trunk_switch;
 
-            // --- THUẬT TOÁN QUÉT MƯỢT SERVO (NON-BLOCKING SWEEP) ---
-            // Nếu vị trí hiện tại chưa tới mục tiêu, nhích từng bước một
-            if (current_servo_pwm != target_servo_pwm) {
-                if (current_time - last_servo_move >= 5) { // Cứ 5ms nhích 1 lần
+      // --- THUẬT TOÁN QUÉT MƯỢT SERVO (NON-BLOCKING SWEEP) ---
+      // Nếu vị trí hiện tại chưa tới mục tiêu do Central ECU chỉ định, nhích từng bước một
+      if (current_servo_pwm != target_servo_pwm) {
+          if (current_time - last_servo_move >= 5) { // Cứ 5ms nhích 1 lần
 
-                    if (current_servo_pwm < target_servo_pwm) {
-                        current_servo_pwm += 5; // Tăng dần PWM để mở chậm
-                        if (current_servo_pwm > target_servo_pwm) current_servo_pwm = target_servo_pwm;
-                    } else {
-                        current_servo_pwm -= 5; // Giảm dần PWM để đóng chậm
-                        if (current_servo_pwm < target_servo_pwm) current_servo_pwm = target_servo_pwm;
-                    }
+              if (current_servo_pwm < target_servo_pwm) {
+                  current_servo_pwm += 5; // Tăng dần PWM để mở chậm
+                  if (current_servo_pwm > target_servo_pwm) current_servo_pwm = target_servo_pwm;
+              } else {
+                  current_servo_pwm -= 5; // Giảm dần PWM để đóng chậm
+                  if (current_servo_pwm < target_servo_pwm) current_servo_pwm = target_servo_pwm;
+              }
 
-                    // Bơm từ từ độ rộng xung ra chân PB6
-                    __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, current_servo_pwm);
-                    last_servo_move = current_time;
-                }
-            }
+              // Bơm từ từ độ rộng xung ra chân PB6
+              __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, current_servo_pwm);
+              last_servo_move = current_time;
+          }
+      }
 
-            /* 4. TRUYỀN GÓI TIN CAN CHUẨN ĐỒ ÁN V3.0 (CHU KỲ 200ms) */
-                        if (current_time - last_can_tx >= 200) {
+      /* 4. TRUYỀN GÓI TIN CAN CHUẨN ĐỒ ÁN V3.0 (CHU KỲ 200ms) */
+      if (current_time - last_can_tx >= 200) {
 
-                            // GÓI 1: 0x410 - TRẠNG THÁI NÚT BẤM & ĐỘNG CƠ CỐP
-                            TxHeader.StdId = CAN_ID_REPORT_REAR_STATUS; // Tự động lấy 0x410
-                            TxHeader.ExtId = 0x01;
-                            TxHeader.RTR = CAN_RTR_DATA;
-                            TxHeader.IDE = CAN_ID_STD;
-                            TxHeader.DLC = 3; // DLC Mới là 3 Byte
-                            TxHeader.TransmitGlobalTime = DISABLE;
+          // GÓI 1: 0x410 - TRẠNG THÁI NÚT BẤM & ĐỘNG CƠ CỐP
+          TxHeader.StdId = CAN_ID_REPORT_REAR_STATUS; // 0x410
+          TxHeader.ExtId = 0x01;
+          TxHeader.RTR = CAN_RTR_DATA;
+          TxHeader.IDE = CAN_ID_STD;
+          TxHeader.DLC = 3; // DLC 3 Byte
+          TxHeader.TransmitGlobalTime = DISABLE;
 
-                            // Byte 0: Mặt nạ nút bấm (Dùng Macro mới của file .h)
-                            TxData[0] = 0x00;
-                            if (brake_pedal == GPIO_PIN_SET) TxData[0] |= REAR_ACT_BRAKE;
-                            if (left_turn == GPIO_PIN_SET)   TxData[0] |= REAR_ACT_LTURN;
-                            if (right_turn == GPIO_PIN_SET)  TxData[0] |= REAR_ACT_RTURN;
-                            if (current_servo_pwm != target_servo_pwm) TxData[0] |= REAR_ACT_TRUNK_ACTIVE;
+          // Byte 0: Mặt nạ nút bấm & hoạt động cốp
+          TxData[0] = 0x00;
+          if (brake_pedal == GPIO_PIN_SET) TxData[0] |= REAR_ACT_BRAKE;
+          if (left_turn == GPIO_PIN_SET)   TxData[0] |= REAR_ACT_LTURN;
+          if (right_turn == GPIO_PIN_SET)  TxData[0] |= REAR_ACT_RTURN;
+          if (current_servo_pwm != target_servo_pwm) TxData[0] |= REAR_ACT_TRUNK_ACTIVE;
 
-                            // Byte 1: Trạng thái động cơ (Đang đứng yên hay đang di chuyển)
-                            if (current_servo_pwm < target_servo_pwm) TxData[1] = TRUNK_OPENING;
-                            else if (current_servo_pwm > target_servo_pwm) TxData[1] = TRUNK_CLOSING;
-                            else TxData[1] = TRUNK_IDLE;
+          // Byte 1: Trạng thái động cơ (Đang đứng yên hay đang di chuyển)
+          if (current_servo_pwm < target_servo_pwm) TxData[1] = TRUNK_OPENING;
+          else if (current_servo_pwm > target_servo_pwm) TxData[1] = TRUNK_CLOSING;
+          else TxData[1] = TRUNK_IDLE;
 
-                            // Byte 2: % Độ mở cốp xe (0% - 100%)
-                            TxData[2] = (trunk_state == 1) ? 100 : 0;
+          // Byte 2: % Độ mở cốp xe (0% - 100%) tính theo PWM thực tế
+          uint8_t open_pct = 0;
+          if (current_servo_pwm >= 500) {
+              open_pct = (uint8_t)(((uint32_t)(current_servo_pwm - 500) * 100U) / 2000U);
+              if (open_pct > 100) open_pct = 100;
+          }
+          TxData[2] = open_pct;
 
-                            HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
+          HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
 
-                            // GÓI 2: 0x411 - KHOẢNG CÁCH SIÊU ÂM (Gửi 4 Byte)
-                            TxHeader.StdId = CAN_ID_REPORT_REAR_SENSORS; // Tự động lấy 0x411
-                            TxHeader.DLC = 4; // DLC Mới là 4 Byte
+          // GÓI 2: 0x411 - KHOẢNG CÁCH SIÊU ÂM (Gửi 4 Byte)
+          TxHeader.StdId = CAN_ID_REPORT_REAR_SENSORS; // 0x411
+          TxHeader.DLC = 4; // DLC 4 Byte
 
-                            // Byte 0 & 1: Khoảng cách cm (Dùng Macro PACK_U16)
-                            TxData[0] = UNPACK_HIGH_BYTE(distance_cm);
-                            TxData[1] = UNPACK_LOW_BYTE(distance_cm);
+          // Byte 0 & 1: Khoảng cách cm (Dùng Macro PACK_U16)
+          TxData[0] = UNPACK_HIGH_BYTE(distance_cm);
+          TxData[1] = UNPACK_LOW_BYTE(distance_cm);
 
-                            // Byte 2: Trạng thái chốt vật lý (Hall effect)
-                            TxData[2] = trunk_state;
+          // Byte 2: Trạng thái chốt vật lý (Hall effect: 1=Mở, 0=Đóng)
+          TxData[2] = (current_servo_pwm > 500) ? 1 : 0;
 
-                            // Byte 3: Tính toán mức độ đỗ xe an toàn (Xanh/Vàng/Đỏ) bằng Macro
-                            TxData[3] = is_reversing ? CALC_PARKING_LEVEL(distance_cm) : PARKING_CLEAR;
+          // Byte 3: Tính toán mức độ đỗ xe an toàn (Xanh/Vàng/Đỏ)
+          TxData[3] = effective_reversing ? CALC_PARKING_LEVEL(distance_cm) : PARKING_CLEAR;
 
-                            HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
+          HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
+
 
                             last_can_tx = current_time;
                             // GÓI 3: 0x720 - REAR BCM HEARTBEAT
@@ -447,6 +478,10 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
                 trunk_state = 0;
                 target_servo_pwm = 500;  // Đóng 0 độ
             }
+            else if (RxData[0] == CMD_TRUNK_STOP)
+            {
+                target_servo_pwm = current_servo_pwm; // Dừng ngay vị trí hiện tại
+            }
         }
 
         // 3. Nhận lệnh điều khiển XI-NHAN/HAZARD từ Central ECU (0x210)
@@ -454,6 +489,15 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
         {
             exec_rear_turn_mask = RxData[0]; // Lưu lại bitmask Main ECU gửi để nháy ở (1)
         }
+
+        // 4. Nhận trạng thái số và cờ vận hành từ Central ECU (0x300)
+        else if (RxHeader.StdId == CAN_ID_STATUS_VEHICLE_STATE && RxHeader.DLC >= 2)
+        {
+            uint8_t current_gear = RxData[0];
+            uint8_t state_flags  = RxData[1];
+            central_is_reversing = (current_gear == GEAR_REVERSE) || (state_flags & STATE_REVERSE_ACTIVE);
+        }
+
     }
 }
 /* USER CODE END 4 */

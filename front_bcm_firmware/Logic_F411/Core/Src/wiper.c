@@ -204,14 +204,24 @@ void Wiper_Task(void) {
     // 1. Quét cảm biến mức nước PE9
     WasherFluid_Process();
 
-    // 2. Nhận lệnh từ Central ECU qua UART
-    static uint8_t lastCmdWiper = 0xFF;
-    if (currentCmdWiper != lastCmdWiper) {
-        lastCmdWiper = currentCmdWiper;
-        if (currentCmdWiper <= (uint8_t)CMD_WIPER_AUTO) {
-            mWiper.tagetWiper   = (CmdWiper_t)currentCmdWiper;
-            mWiper.currentWiper = mWiper.tagetWiper;
-            mWiper.wiperTime    = currentTick;
+    // 2. Nhận lệnh từ Central ECU qua UART (CAN 0x201 EXEC_FRONT_WIPERS)
+    extern volatile uint8_t f411_failsafe_active;
+    if (f411_failsafe_active) {
+        // [ISO 26262 ASIL-B FAIL-SAFE]
+        // Khi mất mạng CAN: Nếu có mưa, tự động duy trì gạt chậm (SLOW) để đảm bảo tầm nhìn
+        if (Get_RainSensor_Percent() > 0) {
+            mWiper.tagetWiper   = CMD_WIPER_SLOW;
+            mWiper.currentWiper = CMD_WIPER_SLOW;
+        }
+    } else {
+        static uint8_t lastCmdWiper = 0xFF;
+        if (currentCmdWiper != lastCmdWiper) {
+            lastCmdWiper = currentCmdWiper;
+            if (currentCmdWiper <= (uint8_t)CMD_WIPER_AUTO) {
+                mWiper.tagetWiper   = (CmdWiper_t)currentCmdWiper;
+                mWiper.currentWiper = mWiper.tagetWiper;
+                mWiper.wiperTime    = currentTick;
+            }
         }
     }
 

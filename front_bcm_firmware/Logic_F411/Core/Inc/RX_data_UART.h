@@ -17,9 +17,12 @@ extern volatile uint8_t    f411_cmd_light_mask;
 extern volatile uint8_t    f411_cmd_light_brightness;
 extern volatile CmdWiper_t f411_cmd_wiper_mode;
 extern volatile uint8_t    f411_cmd_wiper_washer;
-extern volatile CmdTurn_t  f411_cmd_turn_arm;
+extern volatile uint8_t    f411_cmd_turn_arm;
 extern volatile uint8_t    f411_cmd_blink_tick;
 extern volatile uint8_t    f411_new_cmd_flag;
+extern volatile uint32_t   f411_last_can_cmd_tick;
+extern volatile uint8_t    f411_failsafe_active;
+extern volatile uint8_t    f411_can_connected;
 
 // ==============================================================================
 // PROTOTYPE HÀM KHỞI TẠO VÀ XỬ LÝ

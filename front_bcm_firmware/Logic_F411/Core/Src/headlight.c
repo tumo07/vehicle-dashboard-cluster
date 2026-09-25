@@ -119,54 +119,74 @@ void Headlight_Task(void)
         lastDebounceTimeBtn = currentTick;
     }
 
-    // 3. Phân luồng công suất Cos / Pha
-    uint8_t is_cos_active = 0;
-    uint8_t is_pha_active = 0;
+    // 3. XỬ LÝ ĐIỀU PHỐI ĐÈN: CENTRAL COORDINATOR COMMAND (0x200) & FAIL-SAFE
+    extern volatile uint8_t  f411_cmd_light_mask;
+    extern volatile uint8_t  f411_cmd_light_brightness;
+    extern volatile uint32_t f411_last_can_cmd_tick;
+    extern volatile uint8_t  f411_can_connected;
+    extern volatile uint8_t  f411_failsafe_active;
 
-    if (is_headlight_power_on) {
-        if (is_high_beam_selected) {
-            is_pha_active = 1; // Sáng Pha PB8
-            is_cos_active = 1; // FIXED: Keep Low Beam ON when High Beam is ON!
-        } else {
-            is_cos_active = 1; // Sáng Cos PB7
-            is_pha_active = 0;
+    uint8_t is_cos_active    = 0;
+    uint8_t is_pha_active    = 0;
+    uint8_t is_drl_on        = 1; // DRL (Daytime Running Light) luôn duy trì khi bật khóa điện
+    uint8_t final_brightness = current_brightness_pct;
+
+    // Kiểm tra mất kết nối Bus CAN > 1200ms -> Kích hoạt ASIL-B Fail-Safe
+    if (f411_can_connected && (currentTick - f411_last_can_cmd_tick > 1200)) {
+        f411_failsafe_active = 1;
+    }
+
+    if (f411_failsafe_active) {
+        // [ISO 26262 ASIL-B FAIL-SAFE MODE]
+        // Khi mất mạng CAN hoàn toàn: Tự động bật đèn chiếu gần (Low Beam) 100% công suất
+        // để lái xe quan sát an toàn và tấp vào lề đường, tắt đèn pha và sương mù.
+        is_cos_active    = 1;
+        is_pha_active    = 0;
+        is_fog_on        = 0;
+        is_drl_on        = 1;
+        final_brightness = 100;
+    } else if (f411_can_connected) {
+        // [CAN v3.0 CENTRAL COORDINATOR MODE - PURE EDGE EXECUTION]
+        // Chấp hành 100% lệnh từ bản tin 0x200 CAN_ID_EXEC_FRONT_LIGHTS
+        // Bit 0: DRL, Bit 1: Low Beam, Bit 2: High Beam, Bit 3: Fog Lamp
+        is_drl_on     = (f411_cmd_light_mask & FRONT_LIGHT_DRL) ? 1 : 1;
+        is_cos_active = (f411_cmd_light_mask & FRONT_LIGHT_LOW_BEAM) ? 1 : 0;
+        is_pha_active = (f411_cmd_light_mask & FRONT_LIGHT_HIGH_BEAM) ? 1 : 0;
+        if (is_pha_active) {
+            is_cos_active = 1; // Tiêu chuẩn: Bật pha vẫn duy trì cos chiếu gần
+        }
+        is_fog_on = (f411_cmd_light_mask & FRONT_LIGHT_FOG) ? 1 : 0;
+
+        if (f411_cmd_light_brightness > 0) {
+            final_brightness = f411_cmd_light_brightness;
+        }
+    } else {
+        // [STANDALONE BENCH TEST MODE - Không có CAN]
+        if (is_headlight_power_on) {
+            if (is_high_beam_selected) {
+                is_pha_active = 1;
+                is_cos_active = 1;
+            } else {
+                is_cos_active = 1;
+                is_pha_active = 0;
+            }
         }
     }
 
-    // 4. DRL: Tu tat khi bat Pha hoac Cos, Tu bat khi tat den chinh
-    uint8_t is_drl_on = 1; // FIXED: DRL stays ON permanently
+    // 4. Xuất phân công chấp hành phần cứng
+    Headlight_Set_PWM_Pulse(HL_TIM_CHANNEL_COS, is_cos_active ? final_brightness : 0); // PB7 - Cos
+    Headlight_Set_PWM_Pulse(HL_TIM_CHANNEL_PHA, is_pha_active ? final_brightness : 0); // PB8 - Pha
 
-    // --- INTEGRATE CAN COMMANDS FROM CENTRAL ECU ---
-    extern volatile uint8_t f411_cmd_light_mask;
-    extern volatile uint8_t f411_cmd_light_brightness;
-    
-    if (f411_cmd_light_mask & (1<<0)) is_drl_on = 1;     // EXEC_FRONT_DRL
-    if (f411_cmd_light_mask & (1<<1)) is_cos_active = 1; // EXEC_FRONT_HEADLIGHT
-    if (f411_cmd_light_mask & (1<<2)) { is_pha_active = 1; is_cos_active = 1; } // EXEC_FRONT_HIGH_BEAM (keeps Low on)
-    if (f411_cmd_light_mask & (1<<3)) is_fog_on = 1;     // EXEC_FRONT_FOG
-    
-    uint8_t final_brightness = current_brightness_pct;
-    if (f411_cmd_light_brightness > 0) final_brightness = f411_cmd_light_brightness;
-
-    // AUTO FOG LOGIC: Sensor overrides button activation
-    if (Get_RainSensor_Percent() > 0) {
-        is_fog_on = 1;
-    }
-
-    // 5. Xuat phan cong chap hanh
-    Headlight_Set_PWM_Pulse(HL_TIM_CHANNEL_COS, is_cos_active ? final_brightness : 0); // PB7
-    Headlight_Set_PWM_Pulse(HL_TIM_CHANNEL_PHA, is_pha_active ? final_brightness : 0); // PB8
-
-    // Xuat truc tiep Port E cho Fog (PE12) va DRL (PE11)
+    // Xuất trực tiếp GPIO Port E cho Fog (PE12) và DRL (PE11)
     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_12, is_fog_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11, is_drl_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
-    // 6. Cap nhat co CAN 0x400
+    // 5. Cập nhật cờ báo cáo trạng thái CAN 0x400 (Report Front Status)
     current_actuator_flags = 0;
-    if (is_drl_on)      current_actuator_flags |= 0x01; // bit0 = FRONT_ACT_DRL
-    if (is_cos_active)  current_actuator_flags |= 0x02; // bit1 = FRONT_ACT_HEADLIGHT (Low Beam)
-    if (is_fog_on)      current_actuator_flags |= 0x04; // bit2 = FRONT_ACT_FOG
-    if (is_pha_active)  current_actuator_flags |= 0x80; // bit7 = HIGH_BEAM (separate from Low Beam)
+    if (is_drl_on)      current_actuator_flags |= FRONT_ACT_DRL;       // Bit 0 (0x01)
+    if (is_cos_active)  current_actuator_flags |= FRONT_ACT_HEADLIGHT; // Bit 1 (0x02) - Low Beam
+    if (is_fog_on)      current_actuator_flags |= FRONT_ACT_FOG;       // Bit 2 (0x04)
+    if (is_pha_active)  current_actuator_flags |= FRONT_ACT_HIGHBEAM;  // Bit 7 (0x80) - High Beam
 }
 
 

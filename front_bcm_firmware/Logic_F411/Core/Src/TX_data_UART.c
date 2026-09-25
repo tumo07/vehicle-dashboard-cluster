@@ -39,7 +39,6 @@ void Bridge_SendFault(uint8_t severity, uint16_t dtc_code, uint8_t counter, uint
     txPacket[5] = simple_err;
 
     HAL_UART_Transmit(pUartHandle, txPacket, 6, 20);
-    HAL_Delay(5); // FIXED: Prevent F103 UART Overrun
 }
 
 void Bridge_SendStatusReport(uint8_t actuatorFlags, uint8_t wiperMode, uint8_t motorHealth) {
@@ -51,7 +50,6 @@ void Bridge_SendStatusReport(uint8_t actuatorFlags, uint8_t wiperMode, uint8_t m
     txPacket[3] = motorHealth;
 
     HAL_UART_Transmit(pUartHandle, txPacket, 4, 20);
-    HAL_Delay(5); // FIXED: Prevent F103 UART Overrun
 }
 
 void Bridge_SendSensorReport(uint8_t rainPercent, uint8_t waterPercent) {
@@ -61,8 +59,7 @@ void Bridge_SendSensorReport(uint8_t rainPercent, uint8_t waterPercent) {
     txPacket[1] = rainPercent;
     txPacket[2] = waterPercent;
 
-    HAL_UART_Transmit(pUartHandle, txPacket, 3, 5);
-    HAL_Delay(5); // FIXED: Prevent F103 UART Overrun
+    HAL_UART_Transmit(pUartHandle, txPacket, 3, 20);
 }
 
 void Bridge_SendHeartbeat(uint8_t counter, uint8_t hbFlags) {
@@ -73,7 +70,6 @@ void Bridge_SendHeartbeat(uint8_t counter, uint8_t hbFlags) {
     txPacket[2] = hbFlags;
 
     HAL_UART_Transmit(pUartHandle, txPacket, 3, 20);
-    HAL_Delay(5); // FIXED: Prevent F103 UART Overrun
 }
 
 void Bridge_SendWiperTurnStatus(uint8_t wiperMode, uint8_t turnMode) {
@@ -85,50 +81,16 @@ void Bridge_SendWiperTurnStatus(uint8_t wiperMode, uint8_t turnMode) {
     txPacket[3] = (uint8_t)(wiperMode + turnMode);
 
     HAL_UART_Transmit(pUartHandle, txPacket, 4, 20);
-    HAL_Delay(5); // FIXED: Prevent F103 UART Overrun
 }
 
 // ==============================================================================
-// 2. TASK CHU KỲ ĐỊNH THỜI PHÁT UART
+// 2. TASK CHU KỲ ĐỊNH THỜI PHÁT UART (CAN v3.0 PROTOCOL MATRIX TIMING)
 // ==============================================================================
 void Front_BCM_Periodic_TX_Task(void) {
     uint32_t currentTick = HAL_GetTick();
 
     // -------------------------------------------------------------
-    // Task 1: Bắn Heartbeat (100ms) & Điều phối cảm biến 0x401 (500ms)
-    // -------------------------------------------------------------
-    static uint32_t lastHbTime = 0;
-    static uint8_t  hbCounter  = 0;
-    static uint8_t  sensorSubDivider = 0;
-
-    if (currentTick - lastHbTime >= 100) {
-        lastHbTime = currentTick;
-
-        // 1. Gửi Heartbeat 0x710
-        uint8_t hbFlags = (HB_INIT_OK | HB_CAN_OK | HB_SENSORS_OK);
-        if (Get_WaterLevel_Status() == 0) {
-            hbFlags |= HB_DTC_ACTIVE;
-        }
-        Bridge_SendHeartbeat(hbCounter++, hbFlags);
-
-        // DELAY TO PREVENT F103 UART OVERRUN (blocking printf takes ~5ms)
-        HAL_Delay(10);
-
-
-        // 2. Chia tần số: Cứ 5 lần Heartbeat (đúng 500ms) thì phát gói 0x401 một lần
-        sensorSubDivider++;
-        if (sensorSubDivider >= 5) {
-            sensorSubDivider = 0;
-
-            uint8_t ambientLight = Get_RainSensor_Percent(); // Đang mưa to -> trả về 15 (0x0F)
-            uint8_t waterLevel   = Get_WaterLevel_Percent();  // Còn nước -> trả về 80 (0x50)
-
-            Bridge_SendSensorReport(ambientLight, waterLevel);
-        }
-    }
-
-    // -------------------------------------------------------------
-    // Task 2: Báo cáo trạng thái cơ cấu chấp hành mỗi 200ms (CAN 0x400)
+    // Task 1: Báo cáo trạng thái cơ cấu chấp hành mỗi 200ms (CAN 0x400)
     // -------------------------------------------------------------
     static uint32_t lastStatusTime = 0;
     if (currentTick - lastStatusTime >= 200) {
@@ -158,6 +120,35 @@ void Front_BCM_Periodic_TX_Task(void) {
         actuatorFlags |= Headlight_Get_Actuator_Flags();
 
         Bridge_SendStatusReport(actuatorFlags, (uint8_t)currentWiper, 100);
+    }
+
+    // -------------------------------------------------------------
+    // Task 2: Báo cáo cảm biến LDR và Cảm biến mưa mỗi 500ms (CAN 0x401)
+    // -------------------------------------------------------------
+    static uint32_t lastSensorTime = 0;
+    if (currentTick - lastSensorTime >= 500) {
+        lastSensorTime = currentTick;
+
+        uint8_t rainPercent  = Get_RainSensor_Percent(); // 0-100%
+        uint8_t waterLevel   = Get_WaterLevel_Percent(); // 80% or 0%
+
+        Bridge_SendSensorReport(rainPercent, waterLevel);
+    }
+
+    // -------------------------------------------------------------
+    // Task 3: Báo cáo nhịp sống Heartbeat mỗi 1000ms (CAN 0x710)
+    // -------------------------------------------------------------
+    static uint32_t lastHbTime = 0;
+    static uint8_t  hbCounter  = 0;
+
+    if (currentTick - lastHbTime >= 1000) {
+        lastHbTime = currentTick;
+
+        uint8_t hbFlags = (HB_INIT_OK | HB_CAN_OK | HB_SENSORS_OK);
+        if (Get_WaterLevel_Status() == 0) {
+            hbFlags |= HB_DTC_ACTIVE;
+        }
+        Bridge_SendHeartbeat(hbCounter++, hbFlags);
     }
 }
 

@@ -122,8 +122,8 @@ int main(void)
          * all EXEC ID parsing and UART forwarding with change-detection.
          * TX_UART_Forward_Commands() is no longer called here. */
 
-        // Định kỳ bắn Heartbeat 0x710 lên Central ECU mỗi 200ms
-        if (HAL_GetTick() - last_heartbeat_tick >= 200) {
+        // Định kỳ bắn Heartbeat 0x710 lên Central ECU mỗi 1000ms (CAN v3.0 Group G)
+        if (HAL_GetTick() - last_heartbeat_tick >= 1000) {
             last_heartbeat_tick = HAL_GetTick();
             hb_counter++;
             uint8_t hb_flags = HB_INIT_OK | HB_CAN_OK | HB_SENSORS_OK;

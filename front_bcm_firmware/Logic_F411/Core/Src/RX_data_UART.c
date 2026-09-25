@@ -18,9 +18,12 @@ volatile uint8_t   f411_cmd_light_mask       = 0;
 volatile uint8_t   f411_cmd_light_brightness = 0;
 volatile CmdWiper_t f411_cmd_wiper_mode      = CMD_WIPER_OFF;
 volatile uint8_t   f411_cmd_wiper_washer     = 0;
-volatile CmdTurn_t  f411_cmd_turn_arm        = CMD_TURN_OFF;
+volatile uint8_t   f411_cmd_turn_arm         = 0;
 volatile uint8_t   f411_cmd_blink_tick       = 0;
 volatile uint8_t   f411_new_cmd_flag         = 0;
+volatile uint32_t  f411_last_can_cmd_tick    = 0;
+volatile uint8_t   f411_failsafe_active      = 0;
+volatile uint8_t   f411_can_connected        = 0;
 
 extern uint8_t currentCmdWiper;
 extern uint8_t currentCmdTurn;
@@ -42,7 +45,10 @@ void Front_UART_Parse_Packet(uint8_t *packet) {
         return; // Sai Checksum -> Hủy gói tin rác
     }
 
-    f411_new_cmd_flag = 1;
+    f411_new_cmd_flag      = 1;
+    f411_last_can_cmd_tick = HAL_GetTick();
+    f411_can_connected     = 1;
+    f411_failsafe_active   = 0;
 
     switch (cmdId) {
         case 0x01: // Lệnh Đèn trước (CAN ID 0x200)

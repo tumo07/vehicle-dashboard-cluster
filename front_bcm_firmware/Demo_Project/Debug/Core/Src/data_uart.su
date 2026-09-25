@@ -1,7 +1,0 @@
-../Core/Src/data_uart.c:25:6:Bridge_Init	16	static
-../Core/Src/data_uart.c:32:6:Bridge_SendFault	40	static
-../Core/Src/data_uart.c:50:6:Bridge_SendStatusReport	24	static
-../Core/Src/data_uart.c:61:6:Bridge_SendSensorReport	24	static
-../Core/Src/data_uart.c:71:6:Bridge_SendHeartbeat	24	static
-../Core/Src/data_uart.c:81:6:Bridge_SendWiperTurnStatus	24	static
-../Core/Src/data_uart.c:98:6:HAL_UART_RxCpltCallback	24	static

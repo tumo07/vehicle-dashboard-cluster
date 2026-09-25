@@ -1,4 +1,0 @@
-../Core/Src/TX_data_CAN.c:23:6:CAN_Init_Filter_And_Start	56	static
-../Core/Src/TX_data_CAN.c:49:6:CAN_Send_Heartbeat	56	static
-../Core/Src/TX_data_CAN.c:74:6:CAN_Send_Front_Status	56	static
-../Core/Src/TX_data_CAN.c:110:6:CAN_Send_Join_Request	48	static

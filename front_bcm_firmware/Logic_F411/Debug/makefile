@@ -60,8 +60,8 @@ all: main-build
 main-build: Logic_F411.elf secondary-outputs
 
 # Tool invocations
-Logic_F411.elf Logic_F411.map: $(OBJS) $(USER_OBJS) C:\Users\khoa\Desktop\Vehicle_dashboard_cluster\front_bcm_firmware\Logic_F411\STM32F411VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Logic_F411.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\khoa\Desktop\Vehicle_dashboard_cluster\front_bcm_firmware\Logic_F411\STM32F411VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Logic_F411.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Logic_F411.elf Logic_F411.map: $(OBJS) $(USER_OBJS) /Users/MAC/STM32CubeIDE/workspace_1.19.0/Logic_F411/STM32F411VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Logic_F411.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/MAC/STM32CubeIDE/workspace_1.19.0/Logic_F411/STM32F411VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Logic_F411.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

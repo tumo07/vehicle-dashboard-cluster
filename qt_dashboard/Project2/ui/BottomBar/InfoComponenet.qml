@@ -83,7 +83,9 @@ Item {
                 id: iconLowBeam
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 30
-                source: "../assets/lowbeam-off.png"
+                source: controller.dashboardModel.data.headlightOn !== false
+                        ? "../assets/lowbeam-on.png"
+                        : "../assets/lowbeam-off.png"
                 fillMode: Image.PreserveAspectFit
             }
 

@@ -1,0 +1,2 @@
+../Core/Src/read_TX_data_CAN.c:12:6:CAN_Logger_Init	1
+../Core/Src/read_TX_data_CAN.c:16:6:CAN_Logger_Print_Frame	10

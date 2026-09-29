@@ -1,0 +1,151 @@
+import QtQuick 2.15
+import QtQuick.Layouts
+
+Item {
+    id: root
+    readonly property bool hazardOn:
+        controller.dashboardModel.data.hazardOn
+
+    readonly property bool leftActive:
+        hazardOn || controller.dashboardModel.data.turnLeftOn
+
+    readonly property bool rightActive:
+        hazardOn || controller.dashboardModel.data.turnRightOn
+
+    readonly property bool anyTurnActive:
+        leftActive || rightActive
+
+    property bool blinkOn: false
+
+    onAnyTurnActiveChanged: {
+        blinkOn = anyTurnActive
+    }
+
+    Component.onCompleted: {
+        blinkOn = anyTurnActive
+    }
+    Timer {
+        interval: 500
+        running: root.anyTurnActive
+        repeat: true
+        triggeredOnStart: false
+
+        onTriggered: {
+            root.blinkOn = !root.blinkOn
+        }
+    }
+    Rectangle {
+        id: centerBar
+        anchors {
+            left: driverHvacComponent.right
+            right: passengerHvacComponent.left
+            top: parent.top
+            bottom: parent.bottom
+            leftMargin: 50
+        }
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 25
+            Image {
+                id: iconTurnLeft
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: root.leftActive && root.blinkOn
+                        ? "../assets/turn-left-on.png"
+                        : "../assets/turn-left-off.png"
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconWiper
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: controller.dashboardModel.data.wiperMode !== 0
+                        ? "../assets/wiper-on.png"
+                        : "../assets/wiper-off.png"
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconLowBeam
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: controller.dashboardModel.data.headlightOn !== false
+                        ? "../assets/lowbeam-on.png"
+                        : "../assets/lowbeam-off.png"
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconHighBeam
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: controller.dashboardModel.data.highBeamOn !== false
+                        ? "../assets/highbeam-on.png"
+                        : "../assets/highbeam-off.png"
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconABS
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: controller.dashboardModel.data.brakeOn !== false
+                        ? "../assets/abs-on.png"
+                        : "../assets/abs-off.png"
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconTrunk
+                readonly property bool trunkOpen:
+                    controller.dashboardModel.data.trunkAjar
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: trunkOpen
+                        ? "../assets/trunk-open.png"
+                        : "../assets/trunk-close.png"
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconReverse
+                readonly property int parkingLevel:
+                    controller.dashboardModel.data.parkingLevel
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: {
+                    switch (parkingLevel) {
+                    case 0x00: // PARKING_CLEAR: > 100 cm
+                        return "../assets/reverse-far.png"
+
+                    case 0x01: // PARKING_CAUTION: 61–100 cm
+                        return "../assets/reverse-med.png"
+
+                    case 0x02: // PARKING_WARNING: 31–60 cm
+                    case 0x03: // PARKING_CRITICAL: 0–30 cm
+                        return "../assets/reverse-close.png"
+
+                    default:
+                        return "../assets/reverse-off.png"
+                    }
+                }
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconDTC
+                readonly property bool dtcActive:
+                    controller.dashboardModel.data.dtcActive
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: dtcActive
+                        ? "../assets/mil-on.png"
+                        : "../assets/mil-off.png"
+                fillMode: Image.PreserveAspectFit
+            }
+            Image {
+                id: iconTurnRight
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                source: root.rightActive && root.blinkOn
+                        ? "../assets/turn-right-on.png"
+                        : "../assets/turn-right-off.png"
+                fillMode: Image.PreserveAspectFit
+            }
+        }
+    }
+}

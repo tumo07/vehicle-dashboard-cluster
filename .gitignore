@@ -43,7 +43,10 @@ Release/
 RemoteSystemsTempFiles/
 
 # Optional workspace-local settings
-.settings/language.settings.xml
+**/.settings/language.settings.xml
+.settings/
+*/.settings/
+**/.settings/
 
 # ============================================================
 # Temporary and backup files

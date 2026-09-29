@@ -1,32 +1,27 @@
 import QtQuick 2.15
 
-Column {
-    anchors.centerIn: parent
-    spacing: 0
-    // property int simulatedSpeed: 50
-    // property int direction: 1
-    // id: speedDisplay
-    // Timer {
-    //     interval: 500
-    //     running: true
-    //     repeat: true
-
-    //     onTriggered: {
-    //         if (speedDisplay.simulatedSpeed === 100)
-    //             speedDisplay.direction = -1
-    //         else if (speedDisplay.simulatedSpeed === 50)
-    //             speedDisplay.direction = 1
-
-    //         speedDisplay.simulatedSpeed += speedDisplay.direction
-    //     }
-    // }
-    Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        text: controller.dashboardModel.data.speedKmh + " km/h" //controller.dashboardModel.data.speedKmh
-        color: speedDisplay.simulatedSpeed > 90 ? "red"
-                                                : speedDisplay.simulatedSpeed > 80 ? "yellow"
-                                                                                   : "#dddddd"
-        font.pixelSize: 28
-        font.bold: true
+Item {
+    id: root
+    implicitWidth: 240
+    implicitHeight: 64
+    property real speedKmh: 0
+    Row {
+        anchors.centerIn: parent
+        spacing: 8
+        Text {
+            id: valueText
+            text: Math.round(root.speedKmh)
+            color: root.speedKmh > 90 ? "#ff867a"
+                                      : root.speedKmh > 80 ? "#ffce70"
+                                                           : "#edf4f7"
+            font.pixelSize: 48
+            font.weight: Font.DemiBold
+        }
+        Text {
+            anchors.baseline: valueText.baseline
+            text: "km/h"
+            color: "#a0aeb9"
+            font.pixelSize: 15
+        }
     }
 }

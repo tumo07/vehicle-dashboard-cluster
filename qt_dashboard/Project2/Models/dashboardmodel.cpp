@@ -25,9 +25,9 @@ DashboardModel::DashboardModel(QObject *parent)
         {"reverseActive", false},
 
         {"speedKmh", 50},
-        {"fuelPercent", 0},
-        {"coolantTempC", 0},
-        {"batteryVoltage", 0.0},
+        {"fuelPercent", 23},
+        {"coolantTempC", 73},
+        {"batteryVoltage", 12.6},
 
         {"drlOn", false},
         {"headlightOn", false},

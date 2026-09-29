@@ -15,7 +15,7 @@ Rectangle {
         anchors {
             left: parent.left
             verticalCenter: parent.verticalCenter
-            margins: 20
+            margins: 15
         }
         fillMode: Image.PreserveAspectFit
         height: parent.height * 0.85
@@ -26,7 +26,7 @@ Rectangle {
             top: parent.top
             bottom: parent.bottom
             left: carSettingIcon.right
-            leftMargin: 50
+            leftMargin: 30
             verticalCenter: parent.verticalCenter
         }
         height: parent.height * 0.85
@@ -44,18 +44,18 @@ Rectangle {
             rightMargin: 30
         }
     }
-    HVACComponenet {
-        id: passengerHvacComponent
-        anchors {
-            top: parent.top
-            bottom: parent.bottom
-            right: parent.right
-            rightMargin: 255
-            verticalCenter: parent.verticalCenter
-        }
-        height: parent.height * 0.85
-        hvacController: controller.model
-    }
+    // HVACComponenet {
+    //     id: passengerHvacComponent
+    //     anchors {
+    //         top: parent.top
+    //         bottom: parent.bottom
+    //         right: parent.right
+    //         rightMargin: 255
+    //         verticalCenter: parent.verticalCenter
+    //     }
+    //     height: parent.height * 0.85
+    //     hvacController: controller.model
+    // }
     VolumeControlComponent {
         id: volumeControl
         anchors {

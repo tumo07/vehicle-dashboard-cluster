@@ -57,6 +57,10 @@ qt_add_qml_module(appProject2
         QML_FILES ui/LeftScreen/SpeedComponent.qml
         QML_FILES ui/BottomBar/InfoComponenet.qml
         RESOURCES ui/assets/abs-off.png ui/assets/abs-on.png ui/assets/fuel.png ui/assets/fuel1.png ui/assets/hand_warning_light.png ui/assets/hand_warning2.png ui/assets/highbeam-off.png ui/assets/highbeam-on.png ui/assets/lowbeam-off.png ui/assets/lowbeam-on.png ui/assets/turn-left-off.png ui/assets/turn-left-on.png ui/assets/turn-right-off.png ui/assets/turn-right-on.png ui/assets/wiper-off.png ui/assets/wiper-on.png
+        QML_FILES ui/LeftScreen/GearPosition.qml
+        RESOURCES ui/assets/reverse-close.png ui/assets/reverse-far.png ui/assets/reverse-med.png ui/assets/reverse-off.png ui/assets/trunk-close.png ui/assets/trunk-open.png
+        QML_FILES ui/LeftScreen/VehicleStatus.qml
+        RESOURCES ui/assets/mil-off.png ui/assets/mil-on.png
 )
 
 target_include_directories(appProject2 PRIVATE

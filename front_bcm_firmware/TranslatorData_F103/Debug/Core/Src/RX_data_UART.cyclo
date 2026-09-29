@@ -1,2 +1,0 @@
-../Core/Src/RX_data_UART.c:22:6:F103_Bridge_Init	1
-../Core/Src/RX_data_UART.c:29:6:HAL_UART_RxCpltCallback	27

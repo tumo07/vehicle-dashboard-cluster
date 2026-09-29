@@ -1,3 +1,0 @@
-../Core/Src/turnsignal.c:16:6:TurnSignal_Init	1
-../Core/Src/turnsignal.c:23:6:TurnSignal_Task	18
-../Core/Src/turnsignal.c:111:11:TurnSignal_GetMode	1

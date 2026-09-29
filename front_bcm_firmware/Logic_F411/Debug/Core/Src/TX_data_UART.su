@@ -1,7 +1,0 @@
-../Core/Src/TX_data_UART.c:26:6:Bridge_Init	16	static
-../Core/Src/TX_data_UART.c:31:6:Bridge_SendFault	32	static
-../Core/Src/TX_data_UART.c:45:6:Bridge_SendStatusReport	24	static
-../Core/Src/TX_data_UART.c:57:6:Bridge_SendSensorReport	24	static
-../Core/Src/TX_data_UART.c:68:6:Bridge_SendHeartbeat	24	static
-../Core/Src/TX_data_UART.c:79:6:Bridge_SendWiperTurnStatus	24	static
-../Core/Src/TX_data_UART.c:94:6:Front_BCM_Periodic_TX_Task	24	static

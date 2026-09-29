@@ -1,4 +1,0 @@
-../Core/Src/RX_data_CAN.c:38:13:Log_To_PC	3
-../Core/Src/RX_data_CAN.c:54:13:Forward_If_Changed	3
-../Core/Src/RX_data_CAN.c:71:6:RX_Data_Parse_Command	1
-../Core/Src/RX_data_CAN.c:77:6:HAL_CAN_RxFifo0MsgPendingCallback	13

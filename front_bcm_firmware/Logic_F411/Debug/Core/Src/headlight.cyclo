@@ -1,6 +1,0 @@
-../Core/Src/headlight.c:34:16:Headlight_Read_Potentiometer	2
-../Core/Src/headlight.c:44:13:Headlight_Set_PWM_Pulse	6
-../Core/Src/headlight.c:53:6:Headlight_Init	2
-../Core/Src/headlight.c:83:6:Headlight_Task	24
-../Core/Src/headlight.c:173:9:Headlight_Get_Actuator_Flags	1
-../Core/Src/headlight.c:178:9:Headlight_Get_Current_Brightness	1

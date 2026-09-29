@@ -1,4 +1,0 @@
-../Core/Src/TX_data_CAN.c:15:6:CAN_Init_Filter_And_Start	4
-../Core/Src/TX_data_CAN.c:39:19:CAN_Transmit_Direct	3
-../Core/Src/TX_data_CAN.c:66:6:CAN_Send_Heartbeat	3
-../Core/Src/TX_data_CAN.c:84:6:CAN_Send_Front_Status	7

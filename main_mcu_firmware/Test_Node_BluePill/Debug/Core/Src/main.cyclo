@@ -1,9 +1,0 @@
-../Core/Src/main.c:47:13:CAN_ConfigFilter_AcceptAll	1
-../Core/Src/main.c:62:6:HAL_CAN_RxFifo0MsgPendingCallback	2
-../Core/Src/main.c:72:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:88:5:main	1
-../Core/Src/main.c:112:6:SystemClock_Config	3
-../Core/Src/main.c:142:13:MX_CAN_Init	2
-../Core/Src/main.c:168:13:MX_TIM2_Init	4
-../Core/Src/main.c:201:13:MX_GPIO_Init	1
-../Core/Src/main.c:221:6:Error_Handler	1

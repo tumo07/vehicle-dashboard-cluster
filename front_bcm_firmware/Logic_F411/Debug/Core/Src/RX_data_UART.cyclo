@@ -1,3 +1,0 @@
-../Core/Src/RX_data_UART.c:28:6:Front_UART_RX_Init	1
-../Core/Src/RX_data_UART.c:34:6:Front_UART_Parse_Packet	6
-../Core/Src/RX_data_UART.c:73:6:HAL_UART_RxCpltCallback	6

@@ -1,3 +1,22 @@
+﻿<div align="center">
+  <h3>TẬP ĐOÀN FPT — VIỆN ĐÀO TẠO QUỐC TẾ FPT TP.HCM (FAI)</h3>
+  <p><strong>Chương trình:</strong> Kỹ Sư Hệ Thống Nhúng Ô Tô (Automotive Embedded Systems)</p>
+  <p><strong>Lớp:</strong> M1.2510.E0 | <strong>Nhóm:</strong> 2 | <strong>Thời gian:</strong> Tháng 09/2026</p>
+  <p><strong>Supervisor:</strong> Phạm Toàn Văn Võ<br><em>Senior Automotive/Embedded Software Engineer tại HELLA (Cựu FPT Software)</em></p>
+</div>
+
+---
+
+## 👥 Đội ngũ phát triển (Nhóm 2)
+| Tên | MSSV | Vai trò |
+|-----|------|---------|
+| **Trịnh Đăng Khoa** | SE203770 | Trưởng nhóm & System Architect |
+| **Nguyễn Đăng Cao Huy** | FMS00041 | Kỹ sư Rear BCM |
+| **Nguyễn Quốc Đạt** | FMS00045 | Kỹ sư Front BCM |
+| **Lê Công Tiểu Long** | FMS00049 | Kỹ sư Gateway & Đo kiểm |
+| **Nguyễn Phương Duy Thắng** | FMS00038 | Kỹ sư HMI Qt 6 / QML |
+
+---
 # Smart Vehicle Dashboard Cluster
 
 This repository contains the complete firmware and software for a distributed, CAN-bus-based Smart Vehicle Dashboard Cluster simulator. It demonstrates a multi-MCU automotive architecture using the **CAN Bus v3.0 Protocol**.
@@ -75,3 +94,4 @@ Due to physical test-rig constraints, the physical turn signal stalks (buttons) 
 4. **Arming:** The Central ECU transmits `CAN_ID_EXEC_REAR_TURN` (`0x210`) with `EXEC_TURN_LEFT_ARM`, telling the Rear BCM it is authorized to blink.
 5. **Synchronization:** The Central ECU broadcasts the `CAN_ID_BLINK_TICK` (`0x130`) every 500ms.
 6. **Execution:** Upon receiving `0x130`, the Rear BCM toggles its LEDs. Simultaneously, the Qt Dashboard receives `CAN_ID_STATUS_TURN_BLINK` (`0x302`) and toggles the UI arrow, achieving perfect 1:1 hardware/software sync.
+

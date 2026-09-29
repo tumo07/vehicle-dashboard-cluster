@@ -2,6 +2,38 @@ import QtQuick 2.15
 import QtQuick.Layouts
 
 Item {
+    id: root
+    readonly property bool hazardOn:
+        controller.dashboardModel.data.hazardOn
+
+    readonly property bool leftActive:
+        hazardOn || controller.dashboardModel.data.turnLeftOn
+
+    readonly property bool rightActive:
+        hazardOn || controller.dashboardModel.data.turnRightOn
+
+    readonly property bool anyTurnActive:
+        leftActive || rightActive
+
+    property bool blinkOn: false
+
+    onAnyTurnActiveChanged: {
+        blinkOn = anyTurnActive
+    }
+
+    Component.onCompleted: {
+        blinkOn = anyTurnActive
+    }
+    Timer {
+        interval: 500
+        running: root.anyTurnActive
+        repeat: true
+        triggeredOnStart: false
+
+        onTriggered: {
+            root.blinkOn = !root.blinkOn
+        }
+    }
     Rectangle {
         id: centerBar
         anchors {
@@ -16,23 +48,11 @@ Item {
             spacing: 25
             Image {
                 id: iconTurnLeft
-                readonly property bool turnActive: controller.dashboardModel.data.turnLeftOn
-                property bool blinkOn: false
-                source: turnActive && blinkOn
-                        ? "../assets/turn-left-on.png"
-                        : "../assets/turn-left-off.png"
-                onTurnActiveChanged: {
-                    blinkOn = turnActive
-                }
-                Timer {
-                    interval: 500
-                    running: iconTurnLeft.turnActive
-                    repeat: true
-                    triggeredOnStart: true
-                    onTriggered: iconTurnLeft.blinkOn = !iconTurnLeft.blinkOn
-                }                
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 30
+                source: root.leftActive && root.blinkOn
+                        ? "../assets/turn-left-on.png"
+                        : "../assets/turn-left-off.png"
                 fillMode: Image.PreserveAspectFit
             }
             Image {
@@ -119,27 +139,12 @@ Item {
             }
             Image {
                 id: iconTurnRight
-                readonly property bool turnActive:
-                    controller.dashboardModel.data.turnRightOn
-                property bool blinkOn: false
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 30
-                source: turnActive && blinkOn
+                source: root.rightActive && root.blinkOn
                         ? "../assets/turn-right-on.png"
                         : "../assets/turn-right-off.png"
                 fillMode: Image.PreserveAspectFit
-                onTurnActiveChanged: {
-                    blinkOn = turnActive
-                }
-                Timer {
-                    interval: 500
-                    running: iconTurnRight.turnActive
-                    repeat: true
-                    triggeredOnStart: false
-                    onTriggered: {
-                        iconTurnRight.blinkOn = !iconTurnRight.blinkOn
-                    }
-                }
             }
         }
     }

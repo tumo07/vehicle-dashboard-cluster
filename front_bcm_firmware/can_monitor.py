@@ -13,11 +13,19 @@
 # ==============================================================================
 
 import serial
+import serial.tools.list_ports
 import time
 import sys
 import re
 import os
+import builtins
 from datetime import datetime
+
+# Guarantee all prints are immediately flushed on Windows
+_builtin_print = builtins.print
+def print(*args, **kwargs):
+    kwargs.setdefault('flush', True)
+    _builtin_print(*args, **kwargs)
 
 try:
     import colorama
@@ -445,44 +453,83 @@ def decode_heartbeat(b, node_name):
     if flags & 0x08: bits.append("DTC_ACTIVE ⚠️")
     return f"[{node_name}] Uptime: {uptime}s | Status: [{' | '.join(bits) or 'NONE'}]"
 
+def resolve_port(target_port):
+    ports = list(serial.tools.list_ports.comports())
+    if target_port:
+        for p in ports:
+            if p.device.upper() == target_port.upper():
+                return p.device
+    
+    # Filter out virtual bluetooth ports
+    usb_ports = [p for p in ports if not (p.hwid and "BTHENUM" in p.hwid)]
+    
+    if target_port:
+        print(f"{C_YELLOW}⚠️  Port '{target_port}' is NOT currently connected!{C_RESET}")
+    
+    if usb_ports:
+        print(f"{C_CYAN}🔍 Available USB Serial Ports:{C_RESET}")
+        for p in usb_ports:
+            print(f"   • {C_BOLD}{p.device}{C_RESET}: {p.description}")
+        print(f"{C_GREEN}➡️  Auto-connecting to: {usb_ports[0].device}{C_RESET}\n")
+        return usb_ports[0].device
+
+    print(f"{C_RED}❌ No physical USB serial port detected!{C_RESET}")
+    print(f"{C_YELLOW}💡 Please plug in your USB-to-UART / J-Link adapter connected to the Gateway.{C_RESET}")
+    return target_port or DEFAULT_PORT
+
 # ==============================================================================
 # Main Monitor Loop
 # ==============================================================================
 
 def main():
-    port = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PORT
+    args = sys.argv[1:]
+    verbose_mode = False
+    if "-v" in args or "--verbose" in args or "--raw" in args:
+        verbose_mode = True
+        args = [a for a in args if a not in ("-v", "--verbose", "--raw")]
+
+    target_port = args[0] if args else DEFAULT_PORT
 
     print(f"\n{C_CYAN}{C_BOLD}========================================================================{C_RESET}")
     print(f"{C_CYAN}{C_BOLD}    SMART VEHICLE DASHBOARD CLUSTER - COMPLETE CAN v3.0 MONITOR         {C_RESET}")
     print(f"{C_CYAN}{C_BOLD}========================================================================{C_RESET}")
+
+    port = resolve_port(target_port)
     print(f"Connecting to port: {C_YELLOW}{port}{C_RESET} @ {BAUDRATE} baud...")
 
     try:
         ser = serial.Serial(port, BAUDRATE, timeout=1)
         print(f"{C_GREEN}✅ Successfully connected to {port}!{C_RESET}")
-        print(f"{C_WHITE}Monitoring all CAN traffic (Commands & faults trigger instant display)...{C_RESET}\n")
+        mode_str = "VERBOSE (All packets)" if verbose_mode else "SMART FILTER (Periodic 2s heartbeats + instant events)"
+        print(f"{C_WHITE}Monitoring all CAN traffic [{mode_str}]...{C_RESET}\n")
     except Exception as e:
         print(f"{C_RED}❌ Cannot open serial port {port}.{C_RESET}")
         print(f"Details: {e}")
-        print(f"Usage: python can_monitor.py <COM_PORT> (e.g. COM9, COM4, COM5)")
+        print(f"Usage: python can_monitor.py <COM_PORT> [-v] (e.g. COM9, COM4, COM3 -v)")
         sys.exit(1)
 
     msg_cache = {}
+    hb_cache = {}
     offline_nodes = set()
+    last_rx_time = time.time()
+    last_idle_notice = time.time()
 
     import threading
 
     def send_can(cid, dlc, hex_data, label):
         tx_pkt = f"TX:{cid}:{dlc}:{hex_data}\r\n".encode('utf-8')
-        ser.write(tx_pkt)
-        can_pkt = f"CAN:{cid}:{dlc}:{hex_data}\r\n".encode('utf-8')
-        ser.write(can_pkt)
-        print(f"{C_YELLOW}🚀 >>> [TX SENT] {label} (ID:0x{cid} DLC:{dlc} Data:{hex_data}){C_RESET}")
+        try:
+            ser.write(tx_pkt)
+            print(f"{C_YELLOW}🚀 >>> [TX SENT] {label} (ID:0x{cid} DLC:{dlc} Data:{hex_data}){C_RESET}")
+        except Exception as ex:
+            print(f"{C_RED}❌ [TX ERROR] Failed to send: {ex}{C_RESET}")
 
     def tx_input_loop():
+        nonlocal verbose_mode
         print(f"{C_YELLOW}⌨️  INTERACTIVE CAN INJECTOR ACTIVE:{C_RESET}")
         print(f"{C_GRAY}   Type [1]=Low Beam, [2]=High Beam, [0]=Lights Off, [drl]=DRL, [fog]=Fog, [fogoff]=Fog Off{C_RESET}")
-        print(f"{C_GRAY}   Type [h]=Hazard, [l]=Left, [r]=Right, [toff]=Turn Off, [w]=Wiper, [woff]=Wiper Off, [t]=Trunk Open, [tclose]=Trunk Close{C_RESET}\n")
+        print(f"{C_GRAY}   Type [h]=Hazard, [l]=Left, [r]=Right, [toff]=Turn Off, [w]=Wiper, [woff]=Wiper Off, [t]=Trunk Open, [tclose]=Trunk Close{C_RESET}")
+        print(f"{C_GRAY}   Type [v]=Toggle Verbose/Filtered mode, [clear]=Clear DTCs{C_RESET}\n")
         while True:
             try:
                 cmd = sys.stdin.readline()
@@ -490,7 +537,10 @@ def main():
                 cmd = cmd.strip().lower()
                 if not cmd: continue
 
-                if cmd in ('1', 'low'):
+                if cmd in ('v', 'verbose', 'raw'):
+                    verbose_mode = not verbose_mode
+                    print(f"{C_CYAN}🔔 Verbose mode: {'ENABLED (Displaying 100% of raw CAN traffic)' if verbose_mode else 'DISABLED (Filtered mode with periodic heartbeats)'}{C_RESET}")
+                elif cmd in ('1', 'low'):
                     send_can("100", "2", "0264", "CMD_LIGHT: LOW BEAM (100%)")
                 elif cmd in ('2', 'high'):
                     send_can("100", "2", "0364", "CMD_LIGHT: HIGH BEAM (100%)")
@@ -518,6 +568,8 @@ def main():
                     send_can("103", "1", "01", "CMD_TRUNK: OPEN")
                 elif cmd in ('tclose',):
                     send_can("103", "1", "02", "CMD_TRUNK: CLOSE")
+                elif cmd in ('clear', 'cleardtc'):
+                    send_can("601", "2", "0000", "CMD_BANNER_CLEAR: ALL DTCS")
                 else:
                     if cmd.upper().startswith("CAN:") or cmd.upper().startswith("TX:"):
                         parts = cmd.strip().split(':')
@@ -526,7 +578,7 @@ def main():
                         else:
                             ser.write((cmd.upper() + "\r\n").encode('utf-8'))
                     else:
-                        print(f"{C_GRAY}Unknown command '{cmd}'. Available: 1, 2, 0, drl, fog, fogoff, h, l, r, toff, w, woff, t, tclose{C_RESET}")
+                        print(f"{C_GRAY}Unknown command '{cmd}'. Available: 1, 2, 0, drl, fog, fogoff, h, l, r, toff, w, woff, t, tclose, v, clear{C_RESET}")
             except Exception:
                 break
 
@@ -535,9 +587,18 @@ def main():
     while True:
         try:
             raw_line = ser.readline().decode('utf-8', errors='ignore').strip()
+            now = time.time()
             if not raw_line:
+                if (now - last_rx_time) > 4.0 and (now - last_idle_notice) > 6.0:
+                    last_idle_notice = now
+                    curr_ports = [p.device.upper() for p in serial.tools.list_ports.comports()]
+                    if port.upper() not in curr_ports:
+                        print(f"{C_RED}⚠️ [SERIAL] Port {port} was disconnected from computer! Waiting for re-plug...{C_RESET}")
+                    else:
+                        print(f"{C_GRAY}[{get_timestamp()}] ⏳ Listening on {port}... (Tip: type '1', '2', 'h', 'l', 'r' to inject test commands, or 'v' for raw mode){C_RESET}")
                 continue
 
+            last_rx_time = now
             can_id, b = parse_packet(raw_line)
             ts = get_timestamp()
 
@@ -549,23 +610,30 @@ def main():
 
             # ==================================================================
             # SPAM FILTER POLICY:
-            # 1. TRANSIENT EVENTS (Commands, ACKs, Faults, Banners):
+            # 1. TRANSIENT EVENTS (Commands, ACKs, Faults, Banners, Watchdog):
             #    --> NEVER FILTERED! Always prints immediately.
             # 2. HEARTBEATS (0x700, 0x710, 0x720):
-            #    --> Filtered on flags byte (ignores uptime counter wrap).
+            #    --> Prints immediately on flag change OR every 2.0s to show clock.
             # 3. PERIODIC BROADCASTS (0x300, 0x301, 0x303, 0x400, etc.):
-            #    --> Filtered on payload change.
+            #    --> Prints immediately on payload change OR every 4.0s to show state.
+            # 4. VERBOSE MODE:
+            #    --> Never filters anything!
             # ==================================================================
-            if can_id in ("700", "710", "720"):
-                key = ("HB", b[1] if len(b) > 1 else 0)
-                if key == msg_cache.get(can_id):
-                    continue
-                msg_cache[can_id] = key
-            elif can_id not in TRANSIENT_EVENT_IDS:
-                key = tuple(b)
-                if key == msg_cache.get(can_id):
-                    continue
-                msg_cache[can_id] = key
+            if not verbose_mode:
+                if can_id in ("700", "710", "720"):
+                    flags = b[1] if len(b) > 1 else 0
+                    last_t, last_fl = hb_cache.get(can_id, (0, -1))
+                    if (flags == last_fl) and (now - last_t < 2.0):
+                        continue
+                    hb_cache[can_id] = (now, flags)
+                elif can_id == "130":
+                    continue  # Sync tick (500ms) only shown in verbose mode
+                elif can_id not in TRANSIENT_EVENT_IDS:
+                    key = tuple(b)
+                    last_t, last_k = msg_cache.get(can_id, (0, None))
+                    if (key == last_k) and (now - last_t < 4.0):
+                        continue
+                    msg_cache[can_id] = (now, key)
 
             # ==================================================================
             # GROUP A: Qt -> Central ECU User Commands

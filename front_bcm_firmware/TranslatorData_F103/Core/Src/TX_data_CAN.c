@@ -105,6 +105,7 @@ void CAN_Send_Front_Status(CAN_HandleTypeDef *hcan, uint8_t wiperStatus, uint8_t
     while (HAL_CAN_GetTxMailboxesFreeLevel(hcan) == 0) {
         if (HAL_GetTick() - timeout > 2) return;
     }
+    HAL_GPIO_TogglePin(LED_CAN_DEBUG_GPIO_Port, LED_CAN_DEBUG_Pin);
     HAL_CAN_AddTxMessage(hcan, &TxHeader, txData, &pTxMailbox);
 }
 

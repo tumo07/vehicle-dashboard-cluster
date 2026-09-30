@@ -74,13 +74,20 @@ void Bridge_SendHeartbeat(uint8_t counter, uint8_t hbFlags) {
 
 void Bridge_SendWiperTurnStatus(uint8_t wiperMode, uint8_t turnMode) {
     if (pUartHandle == NULL) return;
-    uint8_t txPacket[4];
-    txPacket[0] = 0x55;
-    txPacket[1] = wiperMode;
-    txPacket[2] = turnMode;
-    txPacket[3] = (uint8_t)(wiperMode + turnMode);
+    uint8_t actuatorFlags = 0;
+    if (wiperMode > CMD_WIPER_OFF) {
+        actuatorFlags |= FRONT_ACT_WIPER;
+    }
+    if (turnMode == CMD_TURN_LEFT) {
+        actuatorFlags |= FRONT_ACT_LTURN;
+    } else if (turnMode == CMD_TURN_RIGHT) {
+        actuatorFlags |= FRONT_ACT_RTURN;
+    } else if (turnMode == CMD_TURN_HAZARD) {
+        actuatorFlags |= (FRONT_ACT_LTURN | FRONT_ACT_RTURN);
+    }
+    actuatorFlags |= Headlight_Get_Actuator_Flags();
 
-    HAL_UART_Transmit(pUartHandle, txPacket, 4, 20);
+    Bridge_SendStatusReport(actuatorFlags, wiperMode, 100);
 }
 
 // ==============================================================================

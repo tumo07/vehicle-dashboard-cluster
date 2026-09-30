@@ -585,6 +585,13 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                 if (d[0] & FRONT_ACT_FOG)       g_veh.light_flags |= STATUS_FOG_ON;
                 else                             g_veh.light_flags &= ~STATUS_FOG_ON;
 
+                /* Byte1: actual wiper mode from Front BCM (physical button or AUTO).
+                 * Central is the single source of truth for 0x301 Byte1 wiperMode,
+                 * so update g_veh.wiper_mode from the BCM's real state. */
+                if (dlc >= 2U && d[1] <= (uint8_t)CMD_WIPER_AUTO) {
+                    g_veh.wiper_mode = (CmdWiper_t)d[1];
+                }
+
                 Broadcast_LightState();
             }
             break;

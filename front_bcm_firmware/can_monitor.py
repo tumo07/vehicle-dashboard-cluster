@@ -122,11 +122,17 @@ def decode_0x301(b):
     return f"Lights State Flags=0x{b[0]:02X}"
 
 def decode_0x302(b):
-    if len(b) < 2: return ""
-    states = {0: "CLOSED", 1: "OPENING", 2: "OPEN", 3: "CLOSING"}
-    return f"Trunk State={states.get(b[0], 'UNKNOWN')} ({b[1]}% open)"
+    if not b: return ""
+    L = "ON" if (b[0] & 0x01) else "OFF"
+    R = "ON" if (b[0] & 0x02) else "OFF"
+    return f"Turn Blinker: L={L} R={R}"
 
 def decode_0x303(b):
+    if len(b) < 2: return ""
+    states = {0: "IDLE", 1: "OPENING", 2: "CLOSING", 3: "STALLED"}
+    return f"Trunk State={states.get(b[1], 'UNKNOWN')} ({b[0]}% open)"
+
+def decode_0x304(b):
     if len(b) < 2: return ""
     dist = (b[0] << 8) | b[1]
     return f"Radar Distance = {dist} cm"
@@ -230,10 +236,13 @@ def main():
                 print(f"\033[94m💡 [LIGHTS_ST] ID:0x301 Data:{b} ↳ {decode_0x301(b)}\033[0m")
                 continue
             if can_id == "302":
-                print(f"\033[94m🧳 [TRUNK_ST]  ID:0x302 Data:{b} ↳ {decode_0x302(b)}\033[0m")
+                print(f"\033[94m🚥 [TURN_ST]   ID:0x302 Data:{b} ↳ {decode_0x302(b)}\033[0m")
                 continue
             if can_id == "303":
-                print(f"\033[94m📡 [RADAR_ST]  ID:0x303 Data:{b} ↳ {decode_0x303(b)}\033[0m")
+                print(f"\033[94m🧳 [TRUNK_ST]  ID:0x303 Data:{b} ↳ {decode_0x303(b)}\033[0m")
+                continue
+            if can_id == "304":
+                print(f"\033[94m📡 [RADAR_ST]  ID:0x304 Data:{b} ↳ {decode_0x304(b)}\033[0m")
                 continue
 
             if can_id == "400":

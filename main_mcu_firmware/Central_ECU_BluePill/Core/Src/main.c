@@ -85,7 +85,7 @@ typedef struct {
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define DTC_STORE_SIZE  8U
-#define BCM_TIMEOUT_MS  500U
+#define BCM_TIMEOUT_MS  2500U  /* 2.5s tolerance for 1000ms periodic heartbeats */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/

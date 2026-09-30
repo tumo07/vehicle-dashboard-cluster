@@ -108,7 +108,7 @@ static uint8_t    g_dtc_count = 0;
 /* ── BCM heartbeat watchdog timestamps ──────────────────────────────────── */
 static uint32_t g_hb_front = 0;
 static uint32_t g_hb_rear  = 0;
-#define BCM_TIMEOUT_MS  500U
+#define BCM_TIMEOUT_MS  2500U  /* 2.5s tolerance for 1000ms periodic heartbeats */
 
 /* Misc */
 static uint8_t  g_btn_prev   = 0;

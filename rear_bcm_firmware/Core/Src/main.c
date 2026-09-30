@@ -23,19 +23,17 @@ uint8_t TxData[8];
 // ----- BIẾN LƯU LỆNH TỪ CENTRAL ECU -----
 volatile uint8_t exec_rear_turn_mask = 0;
 
-// ----- BIẾN ĐIỀU KHIỂN XI-NHAN ĐỒNG BỘ VỚI FRONT BCM (CAN v3.0 / FMVSS 108) -----
-static CmdTurn_t        currentTurnMode       = CMD_TURN_OFF;
+// ----- BIẾN ĐIỀU KHIỂN XI-NHAN ĐỒNG BỘ (CAN v3.0 / FMVSS 108) -----
 static uint32_t         lastFlashTime          = 0;
-static uint8_t          flashState             = 0;
+static uint8_t          local_failsafe_flash   = 0;
 static uint32_t         last_can_tick_time     = 0;
 static volatile uint8_t rear_cmd_blink_tick    = 0;
 static volatile uint8_t rear_can_connected     = 0;
 
-// Nút bấm xi-nhan cục bộ trên Rear BCM (PA5 / PA6) có chống rung & chốt trạng thái (Toggle)
+// Nút bấm xi-nhan cục bộ trên Rear BCM (PA5 / PA6) - Chống rung 50ms & gửi request lên Central ECU
 static uint8_t          last_left_turn_btn     = GPIO_PIN_RESET;
 static uint8_t          last_right_turn_btn    = GPIO_PIN_RESET;
 static uint32_t         last_turn_debounce     = 0;
-static uint8_t          rear_turn_req_mask     = 0; // Bitmask REAR_ACT_LTURN, REAR_ACT_RTURN gửi lên 0x410
 
 // ----- BIẾN CHO CỐP XE -----
 uint32_t last_kick_time = 0;
@@ -119,6 +117,24 @@ void Rear_RequestTrunkAction(CmdTrunk_t req_cmd) {
     HAL_CAN_AddTxMessage(&hcan, &reqHeader, reqData, &reqMailbox);
 }
 
+// Hàm gửi yêu cầu XI-NHAN lên Central ECU (CAN ID 0x102)
+void Rear_SendTurnRequest(CmdTurn_t req_cmd) {
+    CAN_TxHeaderTypeDef reqHeader;
+    uint32_t reqMailbox;
+    uint8_t reqData[1];
+
+    reqHeader.StdId = CAN_ID_CMD_TURN_SIGNAL; // 0x102
+    reqHeader.ExtId = 0x00;
+    reqHeader.RTR   = CAN_RTR_DATA;
+    reqHeader.IDE   = CAN_ID_STD;
+    reqHeader.DLC   = 1;
+    reqHeader.TransmitGlobalTime = DISABLE;
+
+    reqData[0] = (uint8_t)req_cmd;
+
+    HAL_CAN_AddTxMessage(&hcan, &reqHeader, reqData, &reqMailbox);
+}
+
 // Hàm gửi báo cáo trạng thái BCM Sau lên Central ECU (CAN ID 0x410)
 void Rear_SendStatusReport(void) {
     CAN_TxHeaderTypeDef hdr;
@@ -133,9 +149,11 @@ void Rear_SendStatusReport(void) {
     hdr.TransmitGlobalTime = DISABLE;
 
     d[0] = 0x00;
-    if (brake_pedal == GPIO_PIN_SET)           d[0] |= REAR_ACT_BRAKE;
-    if (rear_turn_req_mask & REAR_ACT_LTURN)   d[0] |= REAR_ACT_LTURN;
-    if (rear_turn_req_mask & REAR_ACT_RTURN)   d[0] |= REAR_ACT_RTURN;
+    if (brake_pedal == GPIO_PIN_SET) d[0] |= REAR_ACT_BRAKE;
+    if ((exec_rear_turn_mask & EXEC_TURN_LEFT_ARM) || (exec_rear_turn_mask & EXEC_TURN_HAZARD_ARM))
+        d[0] |= REAR_ACT_LTURN;
+    if ((exec_rear_turn_mask & EXEC_TURN_RIGHT_ARM) || (exec_rear_turn_mask & EXEC_TURN_HAZARD_ARM))
+        d[0] |= REAR_ACT_RTURN;
     if (current_servo_pwm != target_servo_pwm) d[0] |= REAR_ACT_TRUNK_ACTIVE;
 
     if (current_servo_pwm < target_servo_pwm)      d[1] = TRUNK_OPENING;
@@ -152,65 +170,33 @@ void Rear_SendStatusReport(void) {
     HAL_CAN_AddTxMessage(&hcan, &hdr, d, &mbox);
 }
 
-// Task điều khiển xi-nhan & đèn phanh đồng bộ chuẩn Front BCM / Central ECU (0x130 / 0x210)
+// Task xuất điều khiển đèn phanh & xi-nhan - FLASH ONLY (lệnh do Central ECU quản lý hoàn toàn qua 0x210 & 0x130)
 void Rear_TurnSignal_Task(uint32_t currentTime) {
-    // 1. Nhận lệnh phân luồng xi-nhan từ Central ECU (0x210 CAN_ID_EXEC_REAR_TURN)
-    static uint8_t lastCmdTurn = 0xFF;
-    if (exec_rear_turn_mask != lastCmdTurn) {
-        lastCmdTurn = exec_rear_turn_mask;
-        if (exec_rear_turn_mask & EXEC_TURN_HAZARD_ARM) {
-            currentTurnMode = CMD_TURN_HAZARD;
-        } else if (exec_rear_turn_mask & EXEC_TURN_LEFT_ARM) {
-            currentTurnMode = CMD_TURN_LEFT;
-        } else if (exec_rear_turn_mask & EXEC_TURN_RIGHT_ARM) {
-            currentTurnMode = CMD_TURN_RIGHT;
-        } else {
-            currentTurnMode = CMD_TURN_OFF;
-            rear_turn_req_mask = 0; // Khi Central ECU tắt lệnh xi-nhan, giải phóng cờ yêu cầu cục bộ
-        }
-    }
+    uint8_t left_active  = (exec_rear_turn_mask & EXEC_TURN_LEFT_ARM)  || (exec_rear_turn_mask & EXEC_TURN_HAZARD_ARM);
+    uint8_t right_active = (exec_rear_turn_mask & EXEC_TURN_RIGHT_ARM) || (exec_rear_turn_mask & EXEC_TURN_HAZARD_ARM);
 
-    // 2. ĐỒNG BỘ NHỊP CHỚP TOÀN CỤC CHUẨN FMVSS 108 / ECE R48 (0x130 BLINK TICK)
-    // Đồng bộ trực tiếp theo mức pha của Central ECU, khử hoàn toàn lỗi lệch pha do toggle
-    if (currentTurnMode == CMD_TURN_OFF) {
+    // Đồng bộ nhịp chớp từ Central ECU (0x130) với Fail-safe fallback
+    uint8_t flashState = 0;
+    if (left_active || right_active) {
+        if (rear_can_connected && (currentTime - last_can_tick_time < 1500)) {
+            // Đồng bộ 100% với nhịp phát 0x130 của Central ECU
+            flashState = (rear_cmd_blink_tick & 0x01);
+        } else {
+            // Fail-safe 500ms khi mất kết nối CAN
+            if (currentTime - lastFlashTime >= 500) {
+                local_failsafe_flash = !local_failsafe_flash;
+                lastFlashTime = currentTime;
+            }
+            flashState = local_failsafe_flash;
+        }
+    } else {
         flashState = 0;
         lastFlashTime = currentTime;
-    } else if (rear_can_connected && (currentTime - last_can_tick_time < 1500)) {
-        // Đồng bộ 100% với nhịp phát 0x130 của Central ECU (cùng pha tuyệt đối với Front BCM)
-        flashState = (rear_cmd_blink_tick & 0x01);
-    } else {
-        // Dự phòng (Fail-Safe fallback 500ms) khi mất kết nối bus CAN
-        if (currentTime - lastFlashTime >= 500) {
-            flashState = !flashState;
-            lastFlashTime = currentTime;
-        }
     }
 
-    // 3. XUẤT ĐIỀU KHIỂN PHẦN CỨNG ĐÈN ĐUÔI / XI-NHAN / PHANH
-    // PB0: Đèn phanh độc lập
-    // PB1: Xi-nhan Trái sau
-    // PB3: Xi-nhan Phải sau
-    GPIO_PinState leftLED  = GPIO_PIN_RESET;
-    GPIO_PinState rightLED = GPIO_PIN_RESET;
-
-    switch (currentTurnMode) {
-        case CMD_TURN_OFF:
-            leftLED  = (brake_pedal == GPIO_PIN_SET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            rightLED = (brake_pedal == GPIO_PIN_SET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            break;
-        case CMD_TURN_LEFT:
-            leftLED  = flashState ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            rightLED = (brake_pedal == GPIO_PIN_SET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            break;
-        case CMD_TURN_RIGHT:
-            leftLED  = (brake_pedal == GPIO_PIN_SET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            rightLED = flashState ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            break;
-        case CMD_TURN_HAZARD:
-            leftLED  = flashState ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            rightLED = flashState ? GPIO_PIN_SET : GPIO_PIN_RESET;
-            break;
-    }
+    // Xuất LED: Xi-nhan nhấp nháy theo flashState. Nếu không nháy thì đèn phanh điều khiển.
+    GPIO_PinState leftLED  = left_active  ? (flashState ? GPIO_PIN_SET : GPIO_PIN_RESET) : ((brake_pedal == GPIO_PIN_SET) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    GPIO_PinState rightLED = right_active ? (flashState ? GPIO_PIN_SET : GPIO_PIN_RESET) : ((brake_pedal == GPIO_PIN_SET) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
     // Đèn phanh chuyên dụng PB0
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, (brake_pedal == GPIO_PIN_SET) ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -253,11 +239,9 @@ int main(void)
   // DÒNG NÀY ĐỂ CHO PHÉP CHIP NGHE MẠNG CAN:
   HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
 
-  // Khởi tạo trạng thái xi-nhan đồng bộ
-  currentTurnMode    = CMD_TURN_OFF;
+  // Khởi tạo trạng thái chớp xi-nhan
   lastFlashTime      = HAL_GetTick();
   last_turn_debounce = HAL_GetTick();
-  flashState         = 0;
   /* USER CODE END 2 */
 
   while (1)
@@ -269,45 +253,27 @@ int main(void)
       trunk_switch = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1); // Công tắc cốp
       is_reversing = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4); // Nút giả lập Số Lùi
 
-      /* 2. XỬ LÝ NÚT BẤM XI-NHAN CỤC BỘ (PA5 / PA6) - TOGGLE & CHỐNG RUNG 50ms */
+      /* 2. XỬ LÝ NÚT BẤM XI-NHAN CỤC BỘ (PA5 / PA6) - GỬI REQUEST LÊN CENTRAL ECU */
       if (current_time - last_turn_debounce >= 50) {
           uint8_t curr_left  = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_5);
           uint8_t curr_right = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6);
-          uint8_t turn_changed = 0;
 
-          // Phát hiện sườn lên nút Trái (PA5) - Nhấn 1 lần bật, nhấn lần nữa tắt
+          // Phát hiện sườn lên nút Trái (PA5) -> Gửi yêu cầu lên Central ECU
           if (curr_left == GPIO_PIN_SET && last_left_turn_btn == GPIO_PIN_RESET) {
-              if (rear_turn_req_mask & REAR_ACT_LTURN) {
-                  rear_turn_req_mask &= ~REAR_ACT_LTURN;
-              } else {
-                  rear_turn_req_mask = (rear_turn_req_mask & ~REAR_ACT_RTURN) | REAR_ACT_LTURN;
-              }
-              turn_changed = 1;
+              Rear_SendTurnRequest(CMD_TURN_LEFT);
           }
 
-          // Phát hiện sườn lên nút Phải (PA6) - Nhấn 1 lần bật, nhấn lần nữa tắt
+          // Phát hiện sườn lên nút Phải (PA6) -> Gửi yêu cầu lên Central ECU
           if (curr_right == GPIO_PIN_SET && last_right_turn_btn == GPIO_PIN_RESET) {
-              if (rear_turn_req_mask & REAR_ACT_RTURN) {
-                  rear_turn_req_mask &= ~REAR_ACT_RTURN;
-              } else {
-                  rear_turn_req_mask = (rear_turn_req_mask & ~REAR_ACT_LTURN) | REAR_ACT_RTURN;
-              }
-              turn_changed = 1;
+              Rear_SendTurnRequest(CMD_TURN_RIGHT);
           }
 
           last_left_turn_btn  = curr_left;
           last_right_turn_btn = curr_right;
           last_turn_debounce  = current_time;
-
-          left_turn  = (rear_turn_req_mask & REAR_ACT_LTURN) ? 1 : 0;
-          right_turn = (rear_turn_req_mask & REAR_ACT_RTURN) ? 1 : 0;
-
-          if (turn_changed) {
-              Rear_SendStatusReport(); // Bắn ngay CAN 0x410 lên Central ECU khi có thao tác nút
-          }
       }
 
-      /* 3. TASK ĐIỀU KHIỂN ĐÈN PHANH & XI-NHAN ĐỒNG BỘ CHUẨN FRONT BCM */
+      /* 3. TASK ĐIỀU KHIỂN ĐÈN PHANH & XI-NHAN - FLASH ONLY */
       Rear_TurnSignal_Task(current_time);
 
       /* 4. LOGIC CẢM BIẾN LÙI VÀ ĐÁ CỐP THÔNG MINH */

@@ -90,6 +90,16 @@ void Bridge_SendWiperTurnStatus(uint8_t wiperMode, uint8_t turnMode) {
     Bridge_SendStatusReport(actuatorFlags, wiperMode, 100);
 }
 
+void Bridge_SendTurnRequest(uint8_t turnReq) {
+    if (pUartHandle == NULL) return;
+    uint8_t txPacket[4];
+    txPacket[0] = 0x55; // Gói báo sự kiện nút bấm tức thì
+    txPacket[1] = 0x00; // Wiper mode dummy
+    txPacket[2] = turnReq; // Yêu cầu xi-nhan (CMD_TURN_LEFT=1, CMD_TURN_RIGHT=2, CMD_TURN_HAZARD=3)
+    txPacket[3] = (uint8_t)(0x55 + 0x00 + turnReq);
+    HAL_UART_Transmit(pUartHandle, txPacket, 4, 20);
+}
+
 // ==============================================================================
 // 2. TASK CHU KỲ ĐỊNH THỜI PHÁT UART (CAN v3.0 PROTOCOL MATRIX TIMING)
 // ==============================================================================

@@ -101,17 +101,14 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
                         break;
                     }
 
-                    case 0x55: { // BẮN CAN 0x400 TỨC THÌ KHI CÓ SỰ KIỆN NÚT BẤM
-                        f103_wiperStatus = rx_buffer[1];
-                        f103_turnStatus  = rx_buffer[2];
+                    case 0x55: { // BẮN CAN TỨC THÌ KHI CÓ SỰ KIỆN NÚT BẤM
+                        f103_turnStatus = rx_buffer[2];
 
-                        uint8_t payload[3] = {0, f103_wiperStatus, 100};
-                        if (f103_turnStatus == 1)      payload[0] |= FRONT_ACT_LTURN;
-                        else if (f103_turnStatus == 2) payload[0] |= FRONT_ACT_RTURN;
-                        else if (f103_turnStatus == 3) payload[0] |= (FRONT_ACT_LTURN | FRONT_ACT_RTURN);
-                        if (f103_wiperStatus > 0)      payload[0] |= FRONT_ACT_WIPER;
-
-                        CAN_Transmit_Direct(&hcan, CAN_ID_REPORT_FRONT_STATUS, 3, payload);
+                        // Gửi lệnh yêu cầu xi-nhan (CAN ID 0x102) lên Central ECU
+                        if (f103_turnStatus > 0) {
+                            uint8_t turnCmd = f103_turnStatus;
+                            CAN_Transmit_Direct(&hcan, CAN_ID_CMD_TURN_SIGNAL, 1, &turnCmd);
+                        }
                         break;
                     }
 

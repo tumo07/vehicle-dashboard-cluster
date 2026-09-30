@@ -127,9 +127,6 @@ static uint32_t   g_last_hb_front    = 0U;
 static uint32_t   g_last_hb_rear     = 0U;
 static uint8_t    g_front_offline    = 0U;
 static uint8_t    g_rear_offline     = 0U;
-static uint8_t    g_front_turn_req   = 0U;
-static uint8_t    g_rear_turn_req    = 0U;
-static uint8_t    g_qt_turn_override = 0U;
 static uint8_t    g_btn_prev         = 0U;
 static uint8_t    g_uptime_cnt       = 0U;
 /* USER CODE END PV */
@@ -320,26 +317,21 @@ static void Send_BlinkTick(void)
     CAN_Send(CAN_ID_STATUS_TURN_BLINK, bp, 1U);
 }
 
-static void Update_Turn_Coordination(void)
+static void Handle_Turn_Request(CmdTurn_t req)
 {
-    uint8_t l = ((g_front_turn_req & FRONT_ACT_LTURN) != 0U) || ((g_rear_turn_req & REAR_ACT_LTURN) != 0U);
-    uint8_t r = ((g_front_turn_req & FRONT_ACT_RTURN) != 0U) || ((g_rear_turn_req & REAR_ACT_RTURN) != 0U);
+    CmdTurn_t next_state;
 
-    if (l || r) {
-        g_qt_turn_override = 0U; /* Hardware buttons take precedence */
-    } else if (g_qt_turn_override != 0U) {
-        return; /* Keep Qt command active if no physical buttons are pressed */
-    }
-
-    if (l && r) {
-        if (g_vehicle.turn_armed != CMD_TURN_HAZARD) Execute_TurnCmd(CMD_TURN_HAZARD);
-    } else if (l) {
-        if (g_vehicle.turn_armed != CMD_TURN_LEFT) Execute_TurnCmd(CMD_TURN_LEFT);
-    } else if (r) {
-        if (g_vehicle.turn_armed != CMD_TURN_RIGHT) Execute_TurnCmd(CMD_TURN_RIGHT);
+    if (req == CMD_TURN_OFF) {
+        next_state = CMD_TURN_OFF;
+    } else if (req == g_vehicle.turn_armed) {
+        // Tapping the same active turn/hazard button toggles it OFF (Coordinator State Machine)
+        next_state = CMD_TURN_OFF;
     } else {
-        if (g_vehicle.turn_armed != CMD_TURN_OFF) Execute_TurnCmd(CMD_TURN_OFF);
+        // Transition to new turn mode (LEFT, RIGHT, HAZARD)
+        next_state = req;
     }
+
+    Execute_TurnCmd(next_state);
 }
 
 static ValidationResult_t Validate_LightCmd(CmdLight_t cmd)
@@ -440,18 +432,20 @@ static void Execute_TurnCmd(CmdTurn_t cmd)
     switch (cmd) {
         case CMD_TURN_LEFT:
             exec = EXEC_TURN_LEFT_ARM;
+            g_vehicle.light_flags |= STATUS_TURN_LEFT_ON;
             g_vehicle.light_flags &= (uint8_t)(~(STATUS_TURN_RIGHT_ON | STATUS_HAZARD_ON));
             g_vehicle.state_flags &= (uint8_t)(~STATE_HAZARD_ACTIVE);
             break;
         case CMD_TURN_RIGHT:
             exec = EXEC_TURN_RIGHT_ARM;
+            g_vehicle.light_flags |= STATUS_TURN_RIGHT_ON;
             g_vehicle.light_flags &= (uint8_t)(~(STATUS_TURN_LEFT_ON | STATUS_HAZARD_ON));
             g_vehicle.state_flags &= (uint8_t)(~STATE_HAZARD_ACTIVE);
             break;
         case CMD_TURN_HAZARD:
             exec = EXEC_TURN_HAZARD_ARM;
             g_vehicle.state_flags |= STATE_HAZARD_ACTIVE;
-            g_vehicle.light_flags |= STATUS_HAZARD_ON;
+            g_vehicle.light_flags |= (uint8_t)(STATUS_HAZARD_ON | STATUS_TURN_LEFT_ON | STATUS_TURN_RIGHT_ON);
             break;
         case CMD_TURN_OFF:
         default:
@@ -974,15 +968,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
             result = Validate_TurnCmd((CmdTurn_t)rx_data[0]);
             Send_ACK(0x02U, (result == VALIDATION_OK) ? ACK_STATUS_APPROVED : ACK_STATUS_REJECTED, result);
             if (result == VALIDATION_OK) {
-                if ((CmdTurn_t)rx_data[0] == CMD_TURN_OFF) {
-                    g_qt_turn_override = 0U;
-                    g_front_turn_req   = 0U;
-                    g_rear_turn_req    = 0U;
-                    Execute_TurnCmd(CMD_TURN_OFF);
-                } else {
-                    g_qt_turn_override = 1U;
-                    Execute_TurnCmd((CmdTurn_t)rx_data[0]);
-                }
+                Handle_Turn_Request((CmdTurn_t)rx_data[0]);
             }
             break;
         case CAN_ID_CMD_TRUNK_CONTROL:
@@ -1006,8 +992,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                 if ((f & FRONT_ACT_FOG) != 0U)        { g_vehicle.light_flags |= STATUS_FOG_ON; }
                 else                                  { g_vehicle.light_flags &= (uint8_t)(~STATUS_FOG_ON); }
 
-                g_front_turn_req = f & (FRONT_ACT_LTURN | FRONT_ACT_RTURN);
-                Update_Turn_Coordination();
                 Broadcast_LightState();
             }
             if (dlc >= 2U) { g_vehicle.wiper_mode = (CmdWiper_t)rx_data[1]; }
@@ -1022,10 +1006,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                     g_vehicle.state_flags |= STATE_TRUNK_AJAR;
                 }
                 Broadcast_TrunkState();
-
-                /* Dual-node coordinated turn requests */
-                g_rear_turn_req = rx_data[0] & (REAR_ACT_LTURN | REAR_ACT_RTURN);
-                Update_Turn_Coordination();
             }
             break;
         case CAN_ID_REPORT_REAR_SENSORS:

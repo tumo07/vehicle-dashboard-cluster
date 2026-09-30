@@ -191,20 +191,29 @@
         <div>
           <h3 class="font-semibold text-sm mb-2">📌 Logic Board — STM32F411 Discovery</h3>
           <table class="pin-table w-full text-xs">
-            <thead><tr><th>Pin</th><th>Function</th><th>Details</th></tr></thead>
+            <thead><tr><th>Pin</th><th>Peripheral / Function</th><th>Hardware Description</th></tr></thead>
             <tbody>
-              <tr><td class="font-mono text-blue-500 font-bold">PA2</td><td>USART2_TX</td><td>Connects to F103 PA10 (RX)</td></tr>
-              <tr><td class="font-mono text-blue-500 font-bold">PA3</td><td>USART2_RX</td><td>Connects to F103 PA9 (TX)</td></tr>
+              <tr><td class="font-mono text-emerald-500 font-bold">PA0</td><td>ADC1_IN0</td><td>Rain Sensor Analog Input (adc_dma_buffer[0])</td></tr>
+              <tr class="bg-amber-500/10"><td class="font-mono text-amber-500 font-bold">PC1</td><td>ADC1_IN11</td><td>Headlight Dimmer Potentiometer (adc_dma_buffer[1])</td></tr>
+              <tr><td class="font-mono text-blue-500 font-bold">PA2</td><td>USART2_TX</td><td>UART TX &rarr; F103 PA10 (RX)</td></tr>
+              <tr><td class="font-mono text-blue-500 font-bold">PA3</td><td>USART2_RX</td><td>UART RX &larr; F103 PA9 (TX)</td></tr>
               <tr class="bg-emerald-500/10"><td class="font-mono font-bold text-emerald-500">PD12 (LD4)</td><td>CAN State LED</td><td><b>GREEN ON</b> = CAN Link Active & OK</td></tr>
               <tr class="bg-red-500/10"><td class="font-mono font-bold text-red-500">PD14 (LD5)</td><td>Fail-Safe LED</td><td><b>RED ON</b> = Bus Lost &gt; 1.2s (Fail-Safe active)</td></tr>
               <tr><td class="font-mono">PB7</td><td>TIM4_CH2 PWM</td><td>Low Beam Headlight (Cos)</td></tr>
               <tr><td class="font-mono">PB8</td><td>TIM4_CH3 PWM</td><td>High Beam Headlight (Pha)</td></tr>
-              <tr><td class="font-mono">PE11</td><td>GPIO Out</td><td>DRL LED</td></tr>
-              <tr><td class="font-mono">PE12</td><td>GPIO Out</td><td>Fog Lamp LED</td></tr>
+              <tr><td class="font-mono">PE11</td><td>GPIO Out</td><td>DRL LED Indicator</td></tr>
+              <tr><td class="font-mono">PE12</td><td>GPIO Out</td><td>Fog Lamp LED Indicator</td></tr>
+              <tr><td class="font-mono">PC4</td><td>GPIO Out</td><td>Turn Signal Left LED</td></tr>
+              <tr><td class="font-mono">PC5</td><td>GPIO Out</td><td>Turn Signal Right LED</td></tr>
               <tr><td class="font-mono">PA1</td><td>TIM2_CH2 PWM</td><td>Wiper Servo Motor</td></tr>
-              <tr><td class="font-mono">PA0</td><td>ADC1_IN0</td><td>Rain Sensor</td></tr>
-              <tr><td class="font-mono">PE9</td><td>GPIO In</td><td>Washer Fluid Float Sensor</td></tr>
-              <tr><td class="font-mono">PC1/PC2</td><td>GPIO Out</td><td>Turn Signals (Left / Right)</td></tr>
+              <tr><td class="font-mono">PC6</td><td>TIM3_CH1 PWM</td><td>Washer Fluid Pump Motor</td></tr>
+              <tr><td class="font-mono">PE9</td><td>GPIO In</td><td>Washer Fluid Level Float Sensor</td></tr>
+              <tr><td class="font-mono">PE10</td><td>GPIO Out</td><td>Low Fluid Warning LED</td></tr>
+              <tr><td class="font-mono">PE7</td><td>GPIO Out</td><td>DTC Error LED Indicator</td></tr>
+              <tr><td class="font-mono">PB0 / PB1</td><td>GPIO In</td><td>Turn Left / Turn Right Buttons</td></tr>
+              <tr><td class="font-mono">PB2</td><td>GPIO In</td><td>Hazard Light Button</td></tr>
+              <tr><td class="font-mono">PE8</td><td>GPIO In</td><td>Wiper Mode Toggle Button</td></tr>
+              <tr><td class="font-mono">PE13-15</td><td>GPIO In</td><td>Headlamp / Low-High / Fog Buttons</td></tr>
             </tbody>
           </table>
         </div>

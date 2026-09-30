@@ -149,13 +149,13 @@ void Headlight_Task(void)
         // [CAN v3.0 CENTRAL COORDINATOR MODE - PURE EDGE EXECUTION]
         // Chấp hành 100% lệnh từ bản tin 0x200 CAN_ID_EXEC_FRONT_LIGHTS
         // Bit 0: DRL, Bit 1: Low Beam, Bit 2: High Beam, Bit 3: Fog Lamp
-        is_drl_on     = (f411_cmd_light_mask & FRONT_LIGHT_DRL) ? 1 : 1;
-        is_cos_active = (f411_cmd_light_mask & FRONT_LIGHT_LOW_BEAM) ? 1 : 0;
-        is_pha_active = (f411_cmd_light_mask & FRONT_LIGHT_HIGH_BEAM) ? 1 : 0;
+        is_drl_on     = (f411_cmd_light_mask & EXEC_FRONT_DRL) ? 1 : 1;
+        is_cos_active = (f411_cmd_light_mask & EXEC_FRONT_HEADLIGHT) ? 1 : 0;
+        is_pha_active = (f411_cmd_light_mask & EXEC_FRONT_HIGH_BEAM) ? 1 : 0;
         if (is_pha_active) {
             is_cos_active = 1; // Tiêu chuẩn: Bật pha vẫn duy trì cos chiếu gần
         }
-        is_fog_on = (f411_cmd_light_mask & FRONT_LIGHT_FOG) ? 1 : 0;
+        is_fog_on = (f411_cmd_light_mask & EXEC_FRONT_FOG) ? 1 : 0;
 
         if (f411_cmd_light_brightness > 0) {
             final_brightness = f411_cmd_light_brightness;
@@ -186,7 +186,7 @@ void Headlight_Task(void)
     if (is_drl_on)      current_actuator_flags |= FRONT_ACT_DRL;       // Bit 0 (0x01)
     if (is_cos_active)  current_actuator_flags |= FRONT_ACT_HEADLIGHT; // Bit 1 (0x02) - Low Beam
     if (is_fog_on)      current_actuator_flags |= FRONT_ACT_FOG;       // Bit 2 (0x04)
-    if (is_pha_active)  current_actuator_flags |= FRONT_ACT_HIGHBEAM;  // Bit 7 (0x80) - High Beam
+    if (is_pha_active)  current_actuator_flags |= FRONT_ACT_HIGH_BEAM;  // Bit 7 (0x80) - High Beam
 }
 
 

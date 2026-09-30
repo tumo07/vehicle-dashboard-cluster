@@ -1,4 +1,4 @@
-﻿/**
+/**
  * =============================================================================
  * @file    can_messages.h
  * @project Smart Vehicle Dashboard Cluster
@@ -60,7 +60,7 @@ extern "C" {
 #define CAN_ID_CMD_LIGHT_CONTROL    0x100U  /* DLC:2 Byte0:CmdLight_t Byte1:brightness 0-100% */
 #define CAN_ID_CMD_WIPER_CONTROL    0x101U  /* DLC:2 Byte0:CmdWiper_t Byte1:0x01=spray */
 #define CAN_ID_CMD_TURN_SIGNAL      0x102U  /* DLC:1 Byte0:CmdTurn_t */
-#define CAN_ID_CMD_TRUNK_CONTROL    0x103U  /* DLC:1 Byte0:CmdTrunk_t — validated by Central ECU */
+#define CAN_ID_CMD_TRUNK_CONTROL    0x103U  /* DLC:1 Byte0:CmdTrunk_t � validated by Central ECU */
 #define CAN_ID_CMD_DIAGNOSTIC       0x104U  /* DLC:2-8 Byte0:DiagCmd_t Byte1-7:params */
 #define CAN_ID_CMD_ACK              0x105U
 /* Central ECU -> Qt, within 10ms of any GROUP A message
@@ -285,6 +285,7 @@ typedef enum {
 #define FRONT_ACT_WASHER        (1U << 4)
 #define FRONT_ACT_LTURN         (1U << 5)
 #define FRONT_ACT_RTURN         (1U << 6)
+#define FRONT_ACT_HIGH_BEAM     (1U << 7)
 
 /* REPORT_REAR_STATUS Byte0 */
 #define REAR_ACT_BRAKE          (1U << 0)

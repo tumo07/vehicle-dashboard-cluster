@@ -285,6 +285,7 @@ typedef enum {
 #define FRONT_ACT_WASHER        (1U << 4)
 #define FRONT_ACT_LTURN         (1U << 5)
 #define FRONT_ACT_RTURN         (1U << 6)
+#define FRONT_ACT_HIGH_BEAM     (1U << 7)
 
 /* REPORT_REAR_STATUS Byte0 */
 #define REAR_ACT_BRAKE          (1U << 0)

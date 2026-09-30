@@ -117,19 +117,40 @@ def decode_0x610(b):
     node_name = nodes.get(b[0], f"UNKNOWN_NODE_{b[0]}")
     return f"{node_name} is offline! (Silent for {b[1]}s)"
 
+def decode_0x301(b):
+    if not b: return ""
+    return f"Lights State Flags=0x{b[0]:02X}"
+
+def decode_0x302(b):
+    if len(b) < 2: return ""
+    states = {0: "CLOSED", 1: "OPENING", 2: "OPEN", 3: "CLOSING"}
+    return f"Trunk State={states.get(b[0], 'UNKNOWN')} ({b[1]}% open)"
+
+def decode_0x303(b):
+    if len(b) < 2: return ""
+    dist = (b[0] << 8) | b[1]
+    return f"Radar Distance = {dist} cm"
+
+def decode_heartbeat(b, node_name):
+    if len(b) < 2: return ""
+    bits = []
+    if b[1] & 0x01: bits.append("INIT_OK")
+    if b[1] & 0x02: bits.append("CAN_OK")
+    if b[1] & 0x04: bits.append("SENSORS_OK")
+    if b[1] & 0x08: bits.append("DTC_ACTIVE ⚠️")
+    return f"[{node_name}] uptime={b[0]}s flags=[{' | '.join(bits) or 'NONE'}]"
+
 def main():
     try:
         ser = serial.Serial(PORT, BAUDRATE, timeout=1)
         print(f"\033[92m--- Connected to {PORT} @ {BAUDRATE} baud ---\033[0m")
-        print("Monitoring CAN Bus (Spam filtered | Data decoded)\n")
+        print("Monitoring CAN Bus (Smart Spam Filter Active)\n")
     except Exception as e:
         print(f"\033[91mCannot open port {PORT}. Error: {e}\033[0m")
-        print("Try changing PORT in the script or close other programs using it.")
         sys.exit(1)
 
-    last_hb_time = 0
-    last_400_key = None
-    last_400_time = 0
+    msg_cache = {}
+    msg_time = {}
 
     while True:
         try:
@@ -143,46 +164,65 @@ def main():
                 print(f"\033[90m[*] {line}\033[0m")
                 continue
 
-            # SPAM FILTER: Ignore fast broadcasts
-            if can_id in ("130", "300", "301", "302", "303", "304", "700", "720"):
+            # --- SMART SPAM FILTER ---
+            # If payload changed, print immediately. If identical, print only once per 1.5 seconds.
+            key = tuple(b)
+            if key == msg_cache.get(can_id) and (now - msg_time.get(can_id, 0)) < 1.5:
+                continue
+            
+            msg_cache[can_id] = key
+            msg_time[can_id] = now
+
+            # --- DECODERS ---
+            if can_id in ("700", "710", "720"):
+                node = {"700": "CENTRAL", "710": "FRONT", "720": "REAR"}.get(can_id)
+                print(f"\033[90m🩺 [HEARTBEAT] ID:0x{can_id} Data:{b}\033[0m")
+                print(f"\033[90m           ↳ {decode_heartbeat(b, node)}\033[0m")
                 continue
 
-            # 0x710 Heartbeat
-            if can_id == "710":
-                if now - last_hb_time >= 2.0:
-                    last_hb_time = now
-                    print(f"\033[90m🩺 [HEARTBEAT] ID:0x710 Data:{b}\033[0m")
-                    print(f"\033[90m           ↳ {decode_0x710(b)}\033[0m")
+            if can_id == "130":
+                print(f"\033[95m⏱️ [SYNC] Blink Tick (0x130)\033[0m")
                 continue
 
-            # 0x500/0x510 Fault DTC
             if can_id in ("500", "510"):
                 print(f"\033[91;1m🚨 [FAULT] ID:0x{can_id} Data:{b}\033[0m")
                 print(f"\033[91;1m       ↳ {decode_0x500(b)}\033[0m")
                 continue
 
-            # 0x400 Status
-            if can_id == "400":
-                key = tuple(b)
-                if key != last_400_key or (now - last_400_time) >= 2.0:
-                    last_400_key, last_400_time = key, now
-                    print(f"\033[92;1m🚘 [STATUS] ID:0x400 Data:{b}\033[0m")
-                    print(f"\033[92m        ↳ {decode_0x400(b)}\033[0m")
-                continue
-
-            # 0x401 Sensors
-            if can_id == "401":
-                print(f"\033[93m🌡️ [SENSOR] ID:0x401 Data:{b}\033[0m")
-                print(f"\033[93m        ↳ {decode_0x401(b)}\033[0m")
-                continue
-
-            # 0x610 Watchdog Alerts
             if can_id == "610":
                 print(f"\033[91;1m⚠️ [WATCHDOG] ID:0x610 Data:{b}\033[0m")
                 print(f"\033[91;1m          ↳ {decode_0x610(b)}\033[0m")
                 continue
 
-            # CAN RX Commands from Qt (Group A)
+            if can_id == "300":
+                gears = {0: "P", 1: "R", 2: "N", 3: "D", 4: "S"}
+                gear = gears.get(b[0], "?") if b else "?"
+                speed = (b[2] << 8) | b[3] if len(b) >= 4 else 0
+                fuel = b[4] if len(b) >= 5 else 0
+                print(f"\033[94m🏎️ [VEHICLE] ID:0x300 Data:{b}\033[0m")
+                print(f"\033[94m         ↳ Gear={gear} | Speed={speed} km/h | Fuel={fuel}%\033[0m")
+                continue
+                
+            if can_id == "301":
+                print(f"\033[94m💡 [LIGHTS_ST] ID:0x301 Data:{b} ↳ {decode_0x301(b)}\033[0m")
+                continue
+            if can_id == "302":
+                print(f"\033[94m🧳 [TRUNK_ST]  ID:0x302 Data:{b} ↳ {decode_0x302(b)}\033[0m")
+                continue
+            if can_id == "303":
+                print(f"\033[94m📡 [RADAR_ST]  ID:0x303 Data:{b} ↳ {decode_0x303(b)}\033[0m")
+                continue
+
+            if can_id == "400":
+                print(f"\033[92;1m🚘 [STATUS] ID:0x400 Data:{b}\033[0m")
+                print(f"\033[92m        ↳ {decode_0x400(b)}\033[0m")
+                continue
+
+            if can_id == "401":
+                print(f"\033[93m🌡️ [SENSOR] ID:0x401 Data:{b}\033[0m")
+                print(f"\033[93m        ↳ {decode_0x401(b)}\033[0m")
+                continue
+
             if can_id.startswith("10"):
                 decoded = decode_rx_cmd(can_id, b)
                 print(f"\033[96m🎮 [CMD] ID:0x{can_id} Data:{b}\033[0m")
@@ -196,8 +236,8 @@ def main():
             print("\n--- Monitoring stopped ---")
             ser.close()
             break
-        except Exception as err:
-            pass # ignore stray decoding errors on corrupted serial lines
+        except Exception:
+            pass 
 
 if __name__ == '__main__':
     main()

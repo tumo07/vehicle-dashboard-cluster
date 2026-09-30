@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
   <h3>TẬP ĐOÀN FPT — VIỆN ĐÀO TẠO QUỐC TẾ FPT TP.HCM (FAI)</h3>
   <p><strong>Chương trình:</strong> Kỹ Sư Hệ Thống Nhúng Ô Tô (Automotive Embedded Systems)</p>
   <p><strong>Lớp:</strong> M1.2510.E0 | <strong>Nhóm:</strong> 2 | <strong>Thời gian:</strong> Tháng 09/2026</p>
@@ -17,6 +17,12 @@
 | **Nguyễn Phương Duy Thắng** | FMS00038 | Kỹ sư HMI Qt 6 / QML |
 
 ---
+
+> [!TIP]
+> 📖 **Interactive Project Guide & Pinout Reference:** Open [`project_guide.html`](./project_guide.html) in your browser for complete interactive pinouts, wiring schematics, CAN v3.0 protocol tables, and one-click IDE import instructions.
+>
+> 🖥️ **Live CAN v3.0 Bus Monitor:** Run `python front_bcm_firmware/can_monitor.py COM9` to inspect and decode 100% of live CAN v3.0 traffic with zero spam and instant command logging.
+
 # Smart Vehicle Dashboard Cluster
 
 This repository contains the complete firmware and software for a distributed, CAN-bus-based Smart Vehicle Dashboard Cluster simulator. It demonstrates a multi-MCU automotive architecture using the **CAN Bus v3.0 Protocol**.

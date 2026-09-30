@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Vehicle Dashboard — CAN v3.0 Project Guide</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .pin-table th { text-align: left; }
+    .pin-table td, .pin-table th { padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .can-wire { stroke: #f59e0b; stroke-width: 3; }
+    .uart-wire { stroke: #3b82f6; stroke-width: 2.5; }
+    .tab-btn { transition: all 0.15s; }
+    .tab-btn.active { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); font-weight: 700; }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-4 sm:p-6 font-sans">
+
+<div class="max-w-5xl mx-auto space-y-5">
+  <!-- Header & Metadata -->
+  <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[var(--border)] pb-4">
+      <div>
+        <h1 class="text-2xl font-bold flex items-center gap-2">🚗 Smart Vehicle Dashboard Cluster</h1>
+        <p class="text-xs font-semibold text-emerald-500 uppercase tracking-wider mt-1">CAN v3.0 Coordinator Architecture — Production Master Guide</p>
+      </div>
+      <div class="text-right text-xs text-[var(--muted-foreground)]">
+        <div><b>TẬP ĐOÀN FPT — VIỆN ĐÀO TẠO QUỐC TẾ FPT TP.HCM (FAI)</b></div>
+        <div>GVHD: <b>Phạm Toàn Văn Võ</b> (Senior Embedded Engineer @ HELLA)</div>
+        <div>Lớp: <b>M1.2510.E0</b> | Nhóm 2 | 09/2026</div>
+      </div>
+    </div>
+
+    <!-- Team Members List -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-4 pt-1 text-xs">
+      <div class="bg-[var(--background)] p-2 rounded-lg border border-[var(--border)]">
+        <div class="font-bold text-[var(--foreground)]">Trịnh Đăng Khoa</div>
+        <div class="text-[var(--muted-foreground)]">SE203770 • Lead / Architect</div>
+      </div>
+      <div class="bg-[var(--background)] p-2 rounded-lg border border-[var(--border)]">
+        <div class="font-bold text-[var(--foreground)]">Nguyễn Đăng Cao Huy</div>
+        <div class="text-[var(--muted-foreground)]">FMS00041 • Rear BCM</div>
+      </div>
+      <div class="bg-[var(--background)] p-2 rounded-lg border border-[var(--border)]">
+        <div class="font-bold text-[var(--foreground)]">Nguyễn Quốc Đạt</div>
+        <div class="text-[var(--muted-foreground)]">FMS00045 • Front BCM</div>
+      </div>
+      <div class="bg-[var(--background)] p-2 rounded-lg border border-[var(--border)]">
+        <div class="font-bold text-[var(--foreground)]">Lê Công Tiểu Long</div>
+        <div class="text-[var(--muted-foreground)]">FMS00049 • Gateway & Đo kiểm</div>
+      </div>
+      <div class="bg-[var(--background)] p-2 rounded-lg border border-[var(--border)]">
+        <div class="font-bold text-[var(--foreground)]">Nguyễn P. Duy Thắng</div>
+        <div class="text-[var(--muted-foreground)]">FMS00038 • HMI Qt 6 / QML</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs -->
+  <div class="flex flex-wrap gap-1 border-b border-[var(--border)] pb-0" id="tabs">
+    <button class="tab-btn active px-3 py-2 text-sm font-medium border-b-2 border-transparent rounded-t" onclick="showTab('overview')">🔌 Overview</button>
+    <button class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent rounded-t" onclick="showTab('central407')">Central ECU (F407)</button>
+    <button class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent rounded-t" onclick="showTab('frontbcm')">Front BCM (F411+F103)</button>
+    <button class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent rounded-t" onclick="showTab('rearbcm')">Rear BCM (BluePill)</button>
+    <button class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent rounded-t" onclick="showTab('translator')">Gateway (BluePill)</button>
+    <button class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent rounded-t" onclick="showTab('canproto')">📡 CAN v3.0 Protocol</button>
+    <button class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent rounded-t" onclick="showTab('build')">🔨 Build & Flash</button>
+  </div>
+
+  <!-- ==================== OVERVIEW ==================== -->
+  <div id="tab-overview" class="tab-content">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-bold">System Architecture — CAN Bus Topology</h2>
+      
+      <svg viewBox="0 0 920 380" class="w-full bg-[var(--background)] border border-[var(--border)] rounded-xl p-3">
+        <!-- CAN Differential Highway -->
+        <line x1="80" y1="190" x2="840" y2="190" stroke="#f59e0b" stroke-width="4" stroke-linecap="round"/>
+        <line x1="80" y1="202" x2="840" y2="202" stroke="#d97706" stroke-width="4" stroke-linecap="round"/>
+        <text x="460" y="180" text-anchor="middle" font-size="11" font-weight="700" fill="#f59e0b">CAN HIGHWAY (500 kbps) — CANH (Yellow) & CANL (Orange)</text>
+        
+        <!-- 120 Ohm Termination Resistors -->
+        <rect x="50" y="182" width="36" height="28" rx="4" fill="none" stroke="#f59e0b" stroke-width="2"/>
+        <text x="68" y="200" text-anchor="middle" font-size="9" font-weight="700" fill="#f59e0b">120Ω</text>
+        
+        <rect x="834" y="182" width="36" height="28" rx="4" fill="none" stroke="#f59e0b" stroke-width="2"/>
+        <text x="852" y="200" text-anchor="middle" font-size="9" font-weight="700" fill="#f59e0b">120Ω</text>
+
+        <!-- Node 1: Gateway BluePill -->
+        <rect x="120" y="30" width="130" height="75" rx="8" fill="#3b82f6" fill-opacity="0.12" stroke="#3b82f6" stroke-width="2"/>
+        <text x="185" y="55" text-anchor="middle" font-size="12" font-weight="700" fill="#3b82f6">Gateway F103</text>
+        <text x="185" y="70" text-anchor="middle" font-size="9" fill="var(--muted-foreground)">CAN ↔ UART (PC)</text>
+        <text x="185" y="86" text-anchor="middle" font-size="9" fill="#3b82f6">PA11/12 (CAN)</text>
+        <line x1="185" y1="105" x2="185" y2="190" stroke="#f59e0b" stroke-width="2"/>
+        <circle cx="185" cy="190" r="4" fill="#f59e0b"/>
+
+        <!-- Qt HMI (PC) -->
+        <rect x="110" y="270" width="150" height="65" rx="8" fill="#8b5cf6" fill-opacity="0.15" stroke="#8b5cf6" stroke-width="2"/>
+        <text x="185" y="295" text-anchor="middle" font-size="12" font-weight="700" fill="#8b5cf6">Qt 6 / QML HMI</text>
+        <text x="185" y="310" text-anchor="middle" font-size="9" fill="var(--muted-foreground)">PC (COMx @ 115200)</text>
+        <line x1="185" y1="105" x2="185" y2="270" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4,3"/>
+
+        <!-- Node 2: Central ECU F407 -->
+        <rect x="330" y="30" width="140" height="75" rx="8" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-width="2"/>
+        <text x="400" y="55" text-anchor="middle" font-size="12" font-weight="700" fill="#10b981">Central ECU F407</text>
+        <text x="400" y="70" text-anchor="middle" font-size="9" fill="var(--muted-foreground)">Coordinator & State</text>
+        <text x="400" y="86" text-anchor="middle" font-size="9" fill="#10b981">PB8/9 (CAN1) • HB 0x700</text>
+        <line x1="400" y1="105" x2="400" y2="190" stroke="#f59e0b" stroke-width="2"/>
+        <circle cx="400" cy="190" r="4" fill="#f59e0b"/>
+
+        <!-- Node 3: Front BCM Dual Board -->
+        <rect x="540" y="30" width="160" height="95" rx="8" fill="#f97316" fill-opacity="0.12" stroke="#f97316" stroke-width="2"/>
+        <text x="620" y="52" text-anchor="middle" font-size="12" font-weight="700" fill="#f97316">Front BCM</text>
+        <text x="620" y="68" text-anchor="middle" font-size="9" fill="var(--foreground)">Logic F411 + Trans F103</text>
+        <text x="620" y="84" text-anchor="middle" font-size="8" fill="var(--muted-foreground)">UART Bridge: F411(PA2/3) ↔ F103(PA10/9)</text>
+        <text x="620" y="100" text-anchor="middle" font-size="8" fill="#f97316">F103 CAN: PA11/12 • HB 0x710</text>
+        <line x1="620" y1="125" x2="620" y2="190" stroke="#f59e0b" stroke-width="2"/>
+        <circle cx="620" cy="190" r="4" fill="#f59e0b"/>
+
+        <!-- Node 4: Rear BCM BluePill -->
+        <rect x="740" y="30" width="130" height="75" rx="8" fill="#ef4444" fill-opacity="0.12" stroke="#ef4444" stroke-width="2"/>
+        <text x="805" y="55" text-anchor="middle" font-size="12" font-weight="700" fill="#ef4444">Rear BCM</text>
+        <text x="805" y="70" text-anchor="middle" font-size="9" fill="var(--muted-foreground)">Trunk, Radar, Tails</text>
+        <text x="805" y="86" text-anchor="middle" font-size="9" fill="#ef4444">PA11/12 (CAN) • HB 0x720</text>
+        <line x1="805" y1="105" x2="805" y2="190" stroke="#f59e0b" stroke-width="2"/>
+        <circle cx="805" cy="190" r="4" fill="#f59e0b"/>
+      </svg>
+
+      <!-- Key Hardware Rules -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)]">
+          <h3 class="font-bold text-amber-500 mb-1">⚡ Bus Rules & Grounding</h3>
+          <ul class="space-y-1 text-[var(--muted-foreground)]">
+            <li>• <b>COMMON GROUND:</b> All 4 boards must connect their GND pins together. Missing common ground causes frame corruption and silent RX failures.</li>
+            <li>• <b>120Ω TERMINATORS:</b> Exactly two 120Ω resistors must be placed across CANH and CANL at the two physical ends of the line.</li>
+            <li>• <b>BAUD RATE:</b> Standard automotive <b>500 kbps</b>.</li>
+          </ul>
+        </div>
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)]">
+          <h3 class="font-bold text-emerald-500 mb-1">🛡️ Fail-Safe Architectures</h3>
+          <ul class="space-y-1 text-[var(--muted-foreground)]">
+            <li>• <b>Front BCM:</b> If CAN link is lost for &gt; 1.2s, board enters Fail-Safe Mode (forces Low Beams ON 100%, turns LD5 Red LED ON).</li>
+            <li>• <b>Central Coordinator:</b> Central ECU validates all user requests before executing. Rejects trunk commands if vehicle speed &gt; 5 km/h.</li>
+            <li>• <b>Smart Kick Trunk:</b> Ultrasonic proximity trigger set to strictly <b>&le; 8cm</b> to avoid false triggers while driving.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== CENTRAL ECU F407 ==================== -->
+  <div id="tab-central407" class="tab-content hidden">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-bold">Central ECU — STM32F407 Discovery</h2>
+      <p class="text-sm text-[var(--muted-foreground)]">The Central Master Coordinator. Ingests user commands from Qt (0x100–0x104), validates states, routes approved executions (0x200–0x211), and broadcasts state (0x300–0x304) and sync ticks (0x130).</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <h3 class="font-semibold text-sm mb-2">📌 Pin Assignment</h3>
+          <table class="pin-table w-full">
+            <thead><tr><th>Pin</th><th>Peripheral / Function</th><th>Hardware Description</th></tr></thead>
+            <tbody>
+              <tr><td class="font-mono text-emerald-500 font-bold">PA1</td><td>ADC1_CH1</td><td>Speed Simulator Potentiometer (0–150 km/h)</td></tr>
+              <tr><td class="font-mono text-emerald-500 font-bold">PA2</td><td>ADC1_CH2</td><td>Gear / Fuel Simulator Pot (P, R, N, D, S)</td></tr>
+              <tr><td class="font-mono text-emerald-500 font-bold">PA0</td><td>USER Button</td><td>Local Headlight Toggle (Active HIGH)</td></tr>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PB8</td><td>CAN1_RX</td><td>Connects to CAN Transceiver CRX / RXD</td></tr>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PB9</td><td>CAN1_TX</td><td>Connects to CAN Transceiver CTX / TXD</td></tr>
+              <tr><td class="font-mono">PD12</td><td>LED Green</td><td>Vehicle Speed &lt; 60 km/h</td></tr>
+              <tr><td class="font-mono">PD13</td><td>LED Orange</td><td>Vehicle Speed 60–99 km/h</td></tr>
+              <tr><td class="font-mono">PD14</td><td>LED Red</td><td>Vehicle Speed &ge; 100 km/h</td></tr>
+              <tr><td class="font-mono">PD15</td><td>LED Blue</td><td>CAN TX Activity indicator</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)] text-xs space-y-2">
+          <h3 class="font-bold text-sm text-[var(--foreground)]">⚙️ Internal Timers & Logic</h3>
+          <p>• <b>TIM6 (100ms):</b> Master sample loop for ADC potentiometers, vehicle state broadcast (0x300), and Central Heartbeat (0x700).</p>
+          <p>• <b>TIM7 (500ms):</b> Turn Signal Synchronization Pulse (0x130 Blink Tick).</p>
+          <p>• <b>Multi-beam Light Bitmask Accumulator:</b> Central ECU dynamically accumulates active lights into <code>EXEC_FRONT_LIGHTS</code> (0x200) so DRL, Low Beam, High Beam, and Fog can stay lit concurrently.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== FRONT BCM ==================== -->
+  <div id="tab-frontbcm" class="tab-content hidden">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-bold">Front BCM — Dual Board Architecture (F411 + F103)</h2>
+      <p class="text-sm text-[var(--muted-foreground)]">To preserve automotive isolation, the Front BCM splits duties: F103 acts as the CAN Bridge, while F411 executes actuator hardware.</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <h3 class="font-semibold text-sm mb-2">📌 Logic Board — STM32F411 Discovery</h3>
+          <table class="pin-table w-full text-xs">
+            <thead><tr><th>Pin</th><th>Function</th><th>Details</th></tr></thead>
+            <tbody>
+              <tr><td class="font-mono text-blue-500 font-bold">PA2</td><td>USART2_TX</td><td>Connects to F103 PA10 (RX)</td></tr>
+              <tr><td class="font-mono text-blue-500 font-bold">PA3</td><td>USART2_RX</td><td>Connects to F103 PA9 (TX)</td></tr>
+              <tr class="bg-emerald-500/10"><td class="font-mono font-bold text-emerald-500">PD12 (LD4)</td><td>CAN State LED</td><td><b>GREEN ON</b> = CAN Link Active & OK</td></tr>
+              <tr class="bg-red-500/10"><td class="font-mono font-bold text-red-500">PD14 (LD5)</td><td>Fail-Safe LED</td><td><b>RED ON</b> = Bus Lost &gt; 1.2s (Fail-Safe active)</td></tr>
+              <tr><td class="font-mono">PB7</td><td>TIM4_CH2 PWM</td><td>Low Beam Headlight (Cos)</td></tr>
+              <tr><td class="font-mono">PB8</td><td>TIM4_CH3 PWM</td><td>High Beam Headlight (Pha)</td></tr>
+              <tr><td class="font-mono">PE11</td><td>GPIO Out</td><td>DRL LED</td></tr>
+              <tr><td class="font-mono">PE12</td><td>GPIO Out</td><td>Fog Lamp LED</td></tr>
+              <tr><td class="font-mono">PA1</td><td>TIM2_CH2 PWM</td><td>Wiper Servo Motor</td></tr>
+              <tr><td class="font-mono">PA0</td><td>ADC1_IN0</td><td>Rain Sensor</td></tr>
+              <tr><td class="font-mono">PE9</td><td>GPIO In</td><td>Washer Fluid Float Sensor</td></tr>
+              <tr><td class="font-mono">PC1/PC2</td><td>GPIO Out</td><td>Turn Signals (Left / Right)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3 class="font-semibold text-sm mb-2">📌 Bridge Board — BluePill (STM32F103C8)</h3>
+          <table class="pin-table w-full text-xs">
+            <thead><tr><th>Pin</th><th>Function</th><th>Target</th></tr></thead>
+            <tbody>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PA11</td><td>CAN_RX</td><td>CAN Transceiver CRX / RXD</td></tr>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PA12</td><td>CAN_TX</td><td>CAN Transceiver CTX / TXD</td></tr>
+              <tr><td class="font-mono text-blue-500 font-bold">PA9</td><td>USART1_TX</td><td>Connects to F411 PA3 (RX)</td></tr>
+              <tr><td class="font-mono text-blue-500 font-bold">PA10</td><td>USART1_RX</td><td>Connects to F411 PA2 (TX)</td></tr>
+              <tr><td class="font-mono text-purple-500">PA2/PA3</td><td>USART2</td><td>Debug logging to PC (115200 baud)</td></tr>
+            </tbody>
+          </table>
+
+          <div class="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs space-y-1">
+            <div class="font-bold text-amber-500">⚠️ Critical Wiring Rule:</div>
+            <p>The F411 <b>never touches the CAN wires</b>. It communicates strictly through UART to the F103. If you connect PA2 to PA9 directly, you wired TX-to-TX and the heartbeat will die! Always wire <b>PA2 &rarr; PA10</b> and <b>PA3 &rarr; PA9</b>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== REAR BCM ==================== -->
+  <div id="tab-rearbcm" class="tab-content hidden">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-bold">Rear BCM — BluePill (STM32F103C8)</h2>
+      <p class="text-sm text-[var(--muted-foreground)]">Controls the Smart Kick Trunk (SG90 Servo), HC-SR04 Reverse Ultrasonic Radar, Tail & Brake LEDs, and Reverse lights.</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <h3 class="font-semibold text-sm mb-2">📌 Pin Assignment</h3>
+          <table class="pin-table w-full text-xs">
+            <thead><tr><th>Pin</th><th>Function</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PA11</td><td>CAN_RX</td><td>CAN Transceiver CRX</td></tr>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PA12</td><td>CAN_TX</td><td>CAN Transceiver CTX</td></tr>
+              <tr><td class="font-mono">PB6</td><td>TIM4_CH1 PWM</td><td>Trunk SG90 Servo (0&deg;=Closed, 90&deg;=Open)</td></tr>
+              <tr><td class="font-mono">PB12</td><td>GPIO Out</td><td>HC-SR04 TRIG (10&micro;s trigger pulse)</td></tr>
+              <tr><td class="font-mono text-red-400 font-bold">PB13</td><td>GPIO In</td><td>HC-SR04 ECHO (<b>Use 5V &rarr; 3.3V divider!</b>)</td></tr>
+              <tr><td class="font-mono">PA0</td><td>Button In</td><td>Brake Pedal simulation</td></tr>
+              <tr><td class="font-mono">PA1</td><td>Button In</td><td>Trunk Manual Switch</td></tr>
+              <tr><td class="font-mono">PA4</td><td>Switch In</td><td>Reverse Gear Switch (R simulation)</td></tr>
+              <tr><td class="font-mono">PB0</td><td>LED Out</td><td>Brake Light (High intensity) / Tail Light</td></tr>
+              <tr><td class="font-mono">PA2</td><td>LED Out</td><td>Reverse Light</td></tr>
+              <tr><td class="font-mono">PB1/PB3</td><td>LED Out</td><td>Rear Turn Signals (Left / Right)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)] text-xs space-y-2">
+          <h3 class="font-bold text-sm text-[var(--foreground)]">🧳 Smart Kick Trunk Calibration</h3>
+          <p>• <b>Trigger Distance:</b> Strictly calibrated to <b>&le; 8 cm</b> (reduced from 15cm) to ensure hands-free kick opening without accidental road spray triggers.</p>
+          <p>• <b>Safety Interlock:</b> Central ECU unconditionally denies trunk opening if Vehicle Speed &gt; 5 km/h or Gear is in Drive/Reverse.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TRANSLATOR GATEWAY ==================== -->
+  <div id="tab-translator" class="tab-content hidden">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-bold">Translator Gateway — BluePill (STM32F103C8)</h2>
+      <p class="text-sm text-[var(--muted-foreground)]">Translates between the 500kbps CAN Bus and 115200 baud ASCII UART connected to the Qt 6 Dashboard running on the laptop.</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <h3 class="font-semibold text-sm mb-2">📌 Pin Assignment</h3>
+          <table class="pin-table w-full text-xs">
+            <thead><tr><th>Pin</th><th>Peripheral</th><th>Connection</th></tr></thead>
+            <tbody>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PA11</td><td>CAN_RX</td><td>CAN Transceiver CRX</td></tr>
+              <tr class="bg-[var(--background)]"><td class="font-mono text-amber-500 font-bold">PA12</td><td>CAN_TX</td><td>CAN Transceiver CTX</td></tr>
+              <tr><td class="font-mono text-blue-500 font-bold">PA9</td><td>USART1_TX</td><td>USB-UART Adapter RXD (to PC)</td></tr>
+              <tr><td class="font-mono text-blue-500 font-bold">PA10</td><td>USART1_RX</td><td>USB-UART Adapter TXD (to PC)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)] text-xs space-y-2">
+          <h3 class="font-bold text-sm text-[var(--foreground)]">💻 PC Serial Protocol</h3>
+          <p>• Format: <code>CAN:&lt;ID_HEX&gt;:&lt;DLC&gt;:&lt;DATA_HEX&gt;\r\n</code></p>
+          <p>• Example: <code>CAN:100:2:0264\r\n</code> (Commands Low Beam at 100% brightness)</p>
+          <p>• Handled automatically by Qt's <code>CanBusGateway.cpp</code> and our <code>can_monitor.py</code> tool.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== CAN PROTOCOL ==================== -->
+  <div id="tab-canproto" class="tab-content hidden">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-bold">📡 CAN v3.0 Protocol Matrix</h2>
+      <p class="text-sm text-[var(--muted-foreground)]">Standard 11-bit CAN identifiers organized into 7 functional groups.</p>
+
+      <div class="overflow-x-auto">
+        <table class="pin-table w-full text-xs">
+          <thead>
+            <tr class="bg-[var(--background)]"><th>Group</th><th>CAN ID</th><th>Source &rarr; Dest</th><th>Timing</th><th>Payload Definition</th></tr>
+          </thead>
+          <tbody>
+            <!-- Group A -->
+            <tr><td rowspan="5" class="font-bold text-purple-400">Group A<br>(Commands)</td><td class="font-mono font-bold">0x100</td><td>Qt &rarr; Central</td><td>Event</td><td><code>[Byte0: CmdLight_t, Byte1: Brightness %]</code></td></tr>
+            <tr><td class="font-mono font-bold">0x101</td><td>Qt &rarr; Central</td><td>Event</td><td><code>[Byte0: CmdWiper_t, Byte1: Washer 0/1]</code></td></tr>
+            <tr><td class="font-mono font-bold">0x102</td><td>Qt &rarr; Central</td><td>Event</td><td><code>[Byte0: CmdTurn_t (0=Off, 1=L, 2=R, 3=Hazard)]</code></td></tr>
+            <tr><td class="font-mono font-bold">0x103</td><td>Qt &rarr; Central</td><td>Event</td><td><code>[Byte0: CmdTrunk_t (0=None, 1=Open, 2=Close)]</code></td></tr>
+            <tr><td class="font-mono font-bold">0x105</td><td>Central &rarr; Qt</td><td>&le;10ms</td><td><b>ACK/NACK:</b> <code>[TargetCmd, AckStatus, Reason]</code></td></tr>
+            
+            <!-- Sync -->
+            <tr class="bg-amber-500/10"><td class="font-bold text-amber-500">Sync</td><td class="font-mono font-bold">0x130</td><td>Central &rarr; ALL</td><td>500ms</td><td><b>Blink Tick:</b> Turn Signal Master Phase Pulse</td></tr>
+
+            <!-- Group B -->
+            <tr><td rowspan="4" class="font-bold text-emerald-400">Group B<br>(Executions)</td><td class="font-mono font-bold">0x200</td><td>Central &rarr; Front</td><td>Event</td><td><code>[Byte0: ExecFrontLight_t bitmask, Byte1: Bri %]</code></td></tr>
+            <tr><td class="font-mono font-bold">0x201</td><td>Central &rarr; Front</td><td>Event</td><td><code>[Byte0: WiperMode, Byte1: Spray 0/1]</code></td></tr>
+            <tr><td class="font-mono font-bold">0x202</td><td>Central &rarr; Front</td><td>Event</td><td><code>[Byte0: ExecTurn_t bitmask (L/R/Hazard)]</code></td></tr>
+            <tr><td class="font-mono font-bold">0x211</td><td>Central &rarr; Rear</td><td>Event</td><td><code>[Byte0: CmdTrunk_t (Execute open/close)]</code></td></tr>
+
+            <!-- Group C -->
+            <tr class="bg-[var(--background)]"><td rowspan="5" class="font-bold text-blue-400">Group C<br>(Telemetry)</td><td class="font-mono font-bold">0x300</td><td>Central &rarr; Qt</td><td>100ms</td><td><b>Vehicle State:</b> Gear, Flags, Speed, Fuel, Temp, Volt</td></tr>
+            <tr class="bg-[var(--background)]"><td class="font-mono font-bold">0x301</td><td>Central &rarr; Qt</td><td>500ms</td><td><b>Active Lights:</b> DRL, Low, High, Fog, WiperMode</td></tr>
+            <tr class="bg-[var(--background)]"><td class="font-mono font-bold">0x302</td><td>Central &rarr; Qt</td><td>500ms</td><td><b>Turn Blink Phase:</b> Bit0=Left ON, Bit1=Right ON</td></tr>
+            <tr class="bg-[var(--background)]"><td class="font-mono font-bold">0x303</td><td>Central &rarr; Qt</td><td>200ms</td><td><b>Trunk State:</b> Open % (0-100), MotorState (0-3)</td></tr>
+            <tr class="bg-[var(--background)]"><td class="font-mono font-bold">0x304</td><td>Central &rarr; Qt</td><td>100ms</td><td><b>Reverse Radar:</b> Distance cm (0xFFFF=None), Level</td></tr>
+
+            <!-- Group D -->
+            <tr><td rowspan="4" class="font-bold text-orange-400">Group D<br>(Reports)</td><td class="font-mono font-bold">0x400</td><td>Front &rarr; Central</td><td>200ms</td><td>Front Actuators status, Wiper mode, Motor health %</td></tr>
+            <tr><td class="font-mono font-bold">0x401</td><td>Front &rarr; Central</td><td>500ms</td><td>Rain Sensor % (0-100), Washer Fluid Level %</td></tr>
+            <tr><td class="font-mono font-bold">0x410</td><td>Rear &rarr; Central</td><td>200ms</td><td>Rear Actuators status, Trunk Motor, Open %</td></tr>
+            <tr><td class="font-mono font-bold">0x411</td><td>Rear &rarr; Central</td><td>100ms</td><td>Ultrasonic Radar dist cm, Trunk Hall Switch</td></tr>
+
+            <!-- Group E & F -->
+            <tr class="bg-red-500/10"><td rowspan="3" class="font-bold text-red-500">Group E/F<br>(Safety)</td><td class="font-mono font-bold">0x500 / 0x510</td><td>BCMs &rarr; Central</td><td>On-Fault</td><td><b>DTC Report:</b> Severity, DTC Code, Count, ErrType</td></tr>
+            <tr class="bg-red-500/10"><td class="font-mono font-bold">0x600</td><td>Central &rarr; Qt</td><td>Event</td><td><b>Banner Fault:</b> Node ID, Severity, DTC Code</td></tr>
+            <tr class="bg-red-500/10"><td class="font-mono font-bold">0x610</td><td>Central &rarr; Qt</td><td>1000ms</td><td><b>Watchdog Alert:</b> Silent Node ID, Duration (s)</td></tr>
+
+            <!-- Group G -->
+            <tr><td rowspan="3" class="font-bold text-gray-400">Group G<br>(Heartbeat)</td><td class="font-mono font-bold">0x700</td><td>Central ECU</td><td>100ms</td><td>Uptime counter + Health Flags (Init, CAN, DTC)</td></tr>
+            <tr><td class="font-mono font-bold">0x710</td><td>Front BCM</td><td>1000ms</td><td>Uptime counter + Health Flags</td></tr>
+            <tr><td class="font-mono font-bold">0x720</td><td>Rear BCM</td><td>1000ms</td><td>Uptime counter + Health Flags</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BUILD ==================== -->
+  <div id="tab-build" class="tab-content hidden">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-bold">🔨 Build & Flash Guide for Academic Verification</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-[var(--background)] p-4 rounded-xl border border-[var(--border)] text-xs space-y-2">
+          <h3 class="font-bold text-sm text-[var(--foreground)]">1. One-Click IDE Import</h3>
+          <p>All projects use <b>100% relative include paths</b>. The examining supervisor can clone anywhere (C:, D:, Mac, Linux) and import cleanly without missing-path errors:</p>
+          <ol class="list-decimal ml-4 space-y-1 text-[var(--muted-foreground)]">
+            <li>Open STM32CubeIDE &rarr; <b>File &rarr; Import</b></li>
+            <li>Select <b>General &rarr; Existing Projects into Workspace</b></li>
+            <li>Browse to repository root &rarr; Click <b>Finish</b></li>
+            <li>Click <b>Project &rarr; Build All</b> (Ctrl+B)</li>
+          </ol>
+        </div>
+
+        <div class="bg-[var(--background)] p-4 rounded-xl border border-[var(--border)] text-xs space-y-2">
+          <h3 class="font-bold text-sm text-[var(--foreground)]">2. Live Bus Monitoring Tool</h3>
+          <p>We provide a dedicated Python script that decodes 100% of CAN v3.0 messages without spamming duplicate heartbeats:</p>
+          <pre class="bg-[var(--card)] p-2 rounded border border-[var(--border)] font-mono text-[11px]">python front_bcm_firmware/can_monitor.py COM9</pre>
+          <p class="text-[var(--muted-foreground)]">• Instantly logs all user button commands, approvals, and fault alerts with millisecond timestamps.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.remove('hidden');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

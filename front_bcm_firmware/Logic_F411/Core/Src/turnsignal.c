@@ -11,6 +11,8 @@ static uint8_t      local_failsafe_flash = 0;
 static uint8_t      lastLeftBtnState     = 1;
 static uint8_t      lastRightBtnState    = 1;
 static uint8_t      lastHazardBtnState   = 1;
+static uint8_t      hazardIdleState      = 1;
+static uint8_t      hazardCalibrated     = 0;
 
 void TurnSignal_Init(void) {
     currentTurnMode      = CMD_TURN_OFF;
@@ -20,11 +22,19 @@ void TurnSignal_Init(void) {
     local_failsafe_flash = 0;
     lastLeftBtnState     = 1;
     lastRightBtnState    = 1;
-    lastHazardBtnState   = 1;
+    hazardIdleState      = HAL_GPIO_ReadPin(GPIOB, BTN_Hazard_Pin);
+    lastHazardBtnState   = hazardIdleState;
+    hazardCalibrated     = 1;
 }
 
 void TurnSignal_Task(void) {
     uint32_t currentTime = HAL_GetTick();
+
+    if (!hazardCalibrated) {
+        hazardIdleState    = HAL_GPIO_ReadPin(GPIOB, BTN_Hazard_Pin);
+        lastHazardBtnState = hazardIdleState;
+        hazardCalibrated   = 1;
+    }
 
     // 1. Quét nút bấm cục bộ - Gửi lệnh yêu cầu lên Coordinator, KHÔNG tự ý đổi trạng thái tại chỗ
     if (currentTime - lastDebounceTime >= 50) {
@@ -38,8 +48,11 @@ void TurnSignal_Task(void) {
         if (currentRightState == GPIO_PIN_RESET && lastRightBtnState == GPIO_PIN_SET) {
             Bridge_SendTurnRequest(CMD_TURN_RIGHT);
         }
-        if (currentHazardState == GPIO_PIN_RESET && lastHazardBtnState == GPIO_PIN_SET) {
-            Bridge_SendTurnRequest(CMD_TURN_HAZARD);
+        // Phát hiện nhấn nút Hazard linh hoạt (hỗ trợ cả active-high và active-low)
+        if (currentHazardState != lastHazardBtnState) {
+            if (currentHazardState != hazardIdleState) {
+                Bridge_SendTurnRequest(CMD_TURN_HAZARD);
+            }
         }
 
         lastLeftBtnState   = currentLeftState;

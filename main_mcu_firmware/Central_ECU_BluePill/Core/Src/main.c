@@ -443,7 +443,7 @@ static void Execute_TurnCmd(CmdTurn_t cmd)
             g_vehicle.state_flags &= (uint8_t)(~STATE_HAZARD_ACTIVE);
             break;
         case CMD_TURN_HAZARD:
-            exec = EXEC_TURN_HAZARD_ARM;
+            exec = EXEC_TURN_HAZARD_ARM | EXEC_TURN_LEFT_ARM | EXEC_TURN_RIGHT_ARM;
             g_vehicle.state_flags |= STATE_HAZARD_ACTIVE;
             g_vehicle.light_flags |= (uint8_t)(STATUS_HAZARD_ON | STATUS_TURN_LEFT_ON | STATUS_TURN_RIGHT_ON);
             break;

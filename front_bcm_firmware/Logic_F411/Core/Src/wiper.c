@@ -46,29 +46,23 @@ static void WasherFluid_Process(void)
     uint8_t rawPin = HAL_GPIO_ReadPin(GPIOE, Sensor_WaterLevel_Pin);
 
     // =========================================================================
-    // 1. CẬP NHẬT ĐÈN TỨC THỜI LIÊN TỤC (KHÔNG BỊ ẢNH HƯỞNG BỞI LATCH FAULT)
-    // Cảm biến ON (HIGH) -> LED BẬT | Cảm biến OFF (LOW) -> LED TẮT
+    // 1. CẬP NHẬT ĐÈN & TỰ ĐỘNG PHỤC HỒI KHI ĐỦ NƯỚC (PE9 = HIGH)
     // =========================================================================
     if (rawPin == GPIO_PIN_SET) {
         HAL_GPIO_WritePin(GPIOE, LED_WaterLevel_Pin, GPIO_PIN_RESET);
+        emptyDebounceTick = 0;
+        is_water_fault_latched = 0;
+        faultReportSent = 0;
     } else {
+        // Cảm biến cạn nước (PE9 = LOW) -> Bật LED báo cạn nước
         HAL_GPIO_WritePin(GPIOE, LED_WaterLevel_Pin, GPIO_PIN_SET);
-    }
 
-    // =========================================================================
-    // 2. LOGIC KHÓA LỖI BẢO VỆ BƠM NƯỚC (LATCHED FAULT)
-    // =========================================================================
-    // Nếu đã từng bị cạn nước và khóa lỗi trước đó, dừng xử lý logic bảo vệ (chờ Reset board)
-    if (is_water_fault_latched) {
-        return;
-    }
-
-    // Khi cảm biến OFF (PE9 = RESET: Hết nước)
-    if (rawPin == GPIO_PIN_RESET) {
+        // =========================================================================
+        // 2. LOGIC BẢO VỆ BƠM NƯỚC (CHỐNG CHÁY BƠM KHI CẠN NƯỚC)
+        // =========================================================================
         if (emptyDebounceTick == 0) {
             emptyDebounceTick = now;
-        } else if (now - emptyDebounceTick >= 300) { // Lọc chống nhiễu 300ms
-            // CHÍNH THỨC KHÓA LỖI TRONG RAM CHO ĐẾN KHI BẤM RESET MCU
+        } else if (!is_water_fault_latched && (now - emptyDebounceTick >= 300)) { // Lọc chống nhiễu 300ms
             is_water_fault_latched = 1;
 
             // Dập tắt mô-tơ bơm nước ngay lập tức
@@ -84,8 +78,6 @@ static void WasherFluid_Process(void)
                 faultReportSent = 1;
             }
         }
-    } else {
-        emptyDebounceTick = 0;
     }
 }
 
@@ -133,6 +125,7 @@ void Motor_SetPWM(uint16_t speed) {
 
 void Motor_Wash_Task(uint8_t isWashActive) {
     uint32_t currentTick = HAL_GetTick();
+    extern volatile uint8_t f411_cmd_wiper_washer;
 
     // TIỀN KIỂM TRA: Cảm biến OFF hoặc đã bị khóa cạn nước -> TẮT BƠM
     if (Get_WaterLevel_Status() == 0) {
@@ -142,20 +135,28 @@ void Motor_Wash_Task(uint8_t isWashActive) {
         return;
     }
 
-    // Khi cảm biến ON: Cho phép bơm chạy ngắt quãng
+    // Khi có nước: Cho phép bơm chạy
     if (isWashActive) {
-        if (currentTick - lastCycleTime >= 3000) {
-            lastCycleTime = currentTick;
-        }
-        uint32_t elapsed = currentTick - lastCycleTime;
-
-        if (elapsed < 1000) {
+        if (f411_cmd_wiper_washer > 0) {
+            // Lệnh bơm cưỡng bức từ Central ECU / Dashboard
             HAL_GPIO_WritePin(GPIOD, Signal_Left_Pin, GPIO_PIN_SET);
             HAL_GPIO_WritePin(GPIOD, Signal_Right_Pin, GPIO_PIN_RESET);
-            Motor_SetPWM(800);
+            Motor_SetPWM(950);
         } else {
-            Motor_SetPWM(0);
-            HAL_GPIO_WritePin(GPIOD, Signal_Left_Pin | Signal_Right_Pin, GPIO_PIN_RESET);
+            // Chế độ INT phun ngắt quãng: chu kỳ 3s (1s phun, 2s nghỉ)
+            if (currentTick - lastCycleTime >= 3000) {
+                lastCycleTime = currentTick;
+            }
+            uint32_t elapsed = currentTick - lastCycleTime;
+
+            if (elapsed < 1000) {
+                HAL_GPIO_WritePin(GPIOD, Signal_Left_Pin, GPIO_PIN_SET);
+                HAL_GPIO_WritePin(GPIOD, Signal_Right_Pin, GPIO_PIN_RESET);
+                Motor_SetPWM(950);
+            } else {
+                Motor_SetPWM(0);
+                HAL_GPIO_WritePin(GPIOD, Signal_Left_Pin | Signal_Right_Pin, GPIO_PIN_RESET);
+            }
         }
     } else {
         lastCycleTime = currentTick;
@@ -259,8 +260,9 @@ void Wiper_Task(void) {
         mWiper.lastDelayTime   = currentTick;
     }
 
-    // 4. Bơm nước rửa kính (Chỉ chạy ở INT và tự tắt ngay nếu cạn nước)
-    uint8_t isWashActive = (mWiper.currentWiper == CMD_WIPER_INTERMITTENT) ? 1 : 0;
+    // 4. Bơm nước rửa kính (Chạy ở INT hoặc khi có lệnh Washer từ CAN)
+    extern volatile uint8_t f411_cmd_wiper_washer;
+    uint8_t isWashActive = ((mWiper.currentWiper == CMD_WIPER_INTERMITTENT) || (f411_cmd_wiper_washer > 0)) ? 1 : 0;
     Motor_Wash_Task(isWashActive);
 
     // 5. Điều khiển Servo & LED (Servo INT chạy độc lập với motor bơm)

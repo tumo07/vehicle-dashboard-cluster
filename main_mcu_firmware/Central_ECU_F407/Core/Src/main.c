@@ -443,7 +443,7 @@ static void Execute_TurnCmd(CmdTurn_t cmd)
             g_veh.state_flags &= ~STATE_HAZARD_ACTIVE;
             break;
         case CMD_TURN_HAZARD:
-            exec = EXEC_TURN_HAZARD_ARM;
+            exec = EXEC_TURN_HAZARD_ARM | EXEC_TURN_LEFT_ARM | EXEC_TURN_RIGHT_ARM;
             g_veh.state_flags |= STATE_HAZARD_ACTIVE;
             g_veh.light_flags |= (STATUS_HAZARD_ON | STATUS_TURN_LEFT_ON | STATUS_TURN_RIGHT_ON);
             break;
@@ -538,8 +538,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
 {
     if (phcan->Instance != CAN1) return;
     
-    /* Toggle Green LED (PD12) on message receive */
-    HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin);
+    /* Ensure Green LED (PD12) stays OFF as requested */
+    HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
 
     CAN_RxHeaderTypeDef hdr;
     uint8_t d[8] = {0};

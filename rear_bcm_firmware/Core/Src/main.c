@@ -322,19 +322,19 @@ int main(void)
       last_trunk_switch = trunk_switch;
 
       // --- THUẬT TOÁN QUÉT MƯỢT SERVO (NON-BLOCKING SWEEP) ---
-      // Nếu vị trí hiện tại chưa tới mục tiêu do Central ECU chỉ định, nhích từng bước một
+      // Nếu vị trí hiện tại chưa tới mục tiêu do Central ECU chỉ định, nhích nhanh mượt mà
       if (current_servo_pwm != target_servo_pwm) {
           if (current_time - last_servo_move >= 5) { // Cứ 5ms nhích 1 lần
 
               if (current_servo_pwm < target_servo_pwm) {
-                  current_servo_pwm += 5; // Tăng dần PWM để mở chậm
+                  current_servo_pwm += 30; // Tăng nhanh PWM để mở cốp nhanh
                   if (current_servo_pwm > target_servo_pwm) current_servo_pwm = target_servo_pwm;
               } else {
-                  current_servo_pwm -= 5; // Giảm dần PWM để đóng chậm
+                  current_servo_pwm -= 30; // Giảm nhanh PWM để đóng cốp nhanh
                   if (current_servo_pwm < target_servo_pwm) current_servo_pwm = target_servo_pwm;
               }
 
-              // Bơm từ từ độ rộng xung ra chân PB6
+              // Bơm độ rộng xung ra chân PB6
               __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, current_servo_pwm);
               last_servo_move = current_time;
           }

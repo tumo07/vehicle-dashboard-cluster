@@ -189,6 +189,7 @@ int main(void)
 	              wiperSent = 0;
 	          }
 
+#if 0
 	          if (HAL_GPIO_ReadPin(GPIOB, BTN_Hazard_Pin) == GPIO_PIN_RESET) {
 	              if (!hazardHolding) {
 	                  hazardHoldTime = HAL_GetTick();
@@ -204,6 +205,7 @@ int main(void)
 	              hazardHolding = 0;
 	              hazardSent = 0;
 	          }
+#endif
 
 	          // Quét lỗi kẹt phím Đèn Chiếu Gần (Cos / Low Beam) > 1.5s -> DTC B1001
 	          if (HAL_GPIO_ReadPin(GPIOE, BTN_CosLamp_Pin) == GPIO_PIN_RESET) {
@@ -266,7 +268,7 @@ int main(void)
         extern volatile uint8_t f411_can_connected;
         extern volatile uint8_t f411_failsafe_active;
         if (f411_can_connected && !f411_failsafe_active) {
-            HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
             HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_RESET);
         } else if (f411_failsafe_active) {
             HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
@@ -645,7 +647,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pins : PE2 Sensor_WaterLevel_Pin */
   GPIO_InitStruct.Pin = GPIO_PIN_2|Sensor_WaterLevel_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : CS_I2C_SPI_Pin LED_Error_Pin LED_WaterLevel_Pin LED_LightDRL_Pin

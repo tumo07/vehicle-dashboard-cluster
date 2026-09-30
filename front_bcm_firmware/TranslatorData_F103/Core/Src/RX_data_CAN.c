@@ -116,11 +116,16 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
         return;
     }
 
-    /* ── BLINK_TICK (0x130): Nhịp nháy xi-nhan ───────────────────────── */
+    /* ── BLINK_TICK (0x130): Nhịp nháy xi-nhan (Always forward sync tick) ── */
     if (id == CAN_ID_BLINK_TICK && dlc >= 1) {
         rx_cmd_blink_tick = rxData[0];
-        uint8_t dummy = 0x00;
-        Forward_If_Changed(0x04, rxData[0], 0x00, &prev_blink_tick, &dummy);
+        uint8_t pkt[5];
+        pkt[0] = 0xAA;
+        pkt[1] = 0x04;
+        pkt[2] = rxData[0];
+        pkt[3] = 0x00;
+        pkt[4] = (uint8_t)(0x04 + rxData[0] + 0x00);
+        HAL_UART_Transmit(&huart1, pkt, 5, 5);
         return;
     }
 

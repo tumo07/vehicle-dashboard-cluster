@@ -87,9 +87,6 @@ uint8_t Get_WaterLevel_Status(void) {
 }
 
 static uint16_t Read_RainSensor_Raw(void) {
-    extern ADC_HandleTypeDef hadc1;
-    HAL_ADC_Stop_DMA(&hadc1);
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_dma_buffer, 2);
     // Channel 0 (Rank 1 - PA0) được lưu ở phần tử 0
     return adc_dma_buffer[0];
 }

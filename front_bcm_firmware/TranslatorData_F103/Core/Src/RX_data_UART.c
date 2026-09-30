@@ -93,8 +93,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
                     }
 
                     case 0xEE: { // Gói 0x500 lỗi DTC
-                        uint8_t payload[5] = { rx_buffer[1], rx_buffer[2], rx_buffer[3], rx_buffer[4], rx_buffer[5] };
-                        CAN_Transmit_Direct(&hcan, CAN_ID_FAULT_FRONT_BCM, 5, payload);
+                        /* Chống nhiễu UART: chỉ bắn CAN nếu severity <= 3 và simple_error <= 9 */
+                        if (rx_buffer[1] <= 3 && rx_buffer[5] <= 9) {
+                            uint8_t payload[5] = { rx_buffer[1], rx_buffer[2], rx_buffer[3], rx_buffer[4], rx_buffer[5] };
+                            CAN_Transmit_Direct(&hcan, CAN_ID_FAULT_FRONT_BCM, 5, payload);
+                        }
                         break;
                     }
 

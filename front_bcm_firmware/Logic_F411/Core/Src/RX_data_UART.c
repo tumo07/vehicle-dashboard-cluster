@@ -68,7 +68,17 @@ void Front_UART_Parse_Packet(uint8_t *packet) {
             break;
 
         case 0x04: // Lệnh Blink Tick (CAN ID 0x130)
-            f411_cmd_blink_tick = data0;
+            {
+                static uint8_t last_raw_tick = 0xFF;
+                static uint8_t internal_phase = 0;
+                if (data0 != last_raw_tick) {
+                    last_raw_tick = data0;
+                    internal_phase = (data0 & 0x01);
+                } else {
+                    internal_phase ^= 1;
+                }
+                f411_cmd_blink_tick = internal_phase;
+            }
             break;
 
         default:

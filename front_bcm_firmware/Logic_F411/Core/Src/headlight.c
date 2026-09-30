@@ -1,4 +1,6 @@
 #include "wiper.h"
+#include "turnsignal.h"
+#include "TX_data_UART.h"
 /*
  * headlight.c
  * Front BCM - Headlight & Fog Logic Controller
@@ -90,6 +92,8 @@ void Headlight_Task(void)
         lastAdcReadTime = currentTick;
     }
 
+    uint8_t btn_changed = 0;
+
     // 2. Quét 3 nút bấm vật lý (Chu kỳ 30ms)
     if (currentTick - lastDebounceTimeBtn >= 30) {
         uint8_t pin13 = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13); // Nút chuyển Pha/Cos
@@ -99,17 +103,20 @@ void Headlight_Task(void)
         // NÚT 1 (PE15): BẬT / TẮT ĐÈN FOG
         if (pin15 == GPIO_PIN_RESET && lastPin15State == GPIO_PIN_SET) {
             is_fog_on = !is_fog_on;
+            btn_changed = 1;
         }
 
         // NÚT 2 (PE14): BẬT / TẮT NGUỒN CỤM PHA - COS
         if (pin14 == GPIO_PIN_RESET && lastPin14State == GPIO_PIN_SET) {
             is_headlight_power_on = !is_headlight_power_on;
+            btn_changed = 1;
         }
 
         // NÚT 3 (PE13): CHUYỂN CHẾ ĐỘ COS (PB7) <-> PHA (PB8)
         if (pin13 == GPIO_PIN_RESET && lastPin13State == GPIO_PIN_SET) {
             if (is_headlight_power_on) {
                 is_high_beam_selected = !is_high_beam_selected;
+                btn_changed = 1;
             }
         }
 
@@ -176,6 +183,11 @@ void Headlight_Task(void)
     if (is_cos_active)  current_actuator_flags |= FRONT_ACT_HEADLIGHT; // Bit 1 (0x02) - Low Beam
     if (is_fog_on)      current_actuator_flags |= FRONT_ACT_FOG;       // Bit 2 (0x04)
     if (is_pha_active)  current_actuator_flags |= FRONT_ACT_HIGH_BEAM;  // Bit 7 (0x80) - High Beam
+
+    // Gửi báo cáo tức thì khi nút bấm vật lý thay đổi
+    if (btn_changed) {
+        Bridge_SendWiperTurnStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)TurnSignal_GetMode());
+    }
 }
 
 

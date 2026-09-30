@@ -189,7 +189,7 @@ GEARS = {
 TRANSIENT_EVENT_IDS = {
     "100", "101", "102", "103", "104", "105",
     "200", "201", "202", "210", "211",
-    "500", "510", "600", "601"
+    "500", "510", "600", "601", "610"
 }
 
 def get_timestamp():
@@ -430,7 +430,9 @@ def decode_watchdog(b):
     if len(b) < 2: return f"Raw: {b}"
     node = NODE_NAMES.get(b[0], f"NODE_{b[0]}")
     duration = b[1]
-    return f"{node} is OFFLINE! (No heartbeat for {duration}s)"
+    if duration == 0:
+        return f"{node} is RECOVERED and back ONLINE! ✅"
+    return f"{node} is OFFLINE! (No heartbeat for {duration}s) ⚠️"
 
 def decode_heartbeat(b, node_name):
     if len(b) < 2: return f"Raw: {b}"
@@ -466,13 +468,21 @@ def main():
         sys.exit(1)
 
     msg_cache = {}
+    offline_nodes = set()
 
     import threading
 
+    def send_can(cid, dlc, hex_data, label):
+        tx_pkt = f"TX:{cid}:{dlc}:{hex_data}\r\n".encode('utf-8')
+        ser.write(tx_pkt)
+        can_pkt = f"CAN:{cid}:{dlc}:{hex_data}\r\n".encode('utf-8')
+        ser.write(can_pkt)
+        print(f"{C_YELLOW}🚀 >>> [TX SENT] {label} (ID:0x{cid} DLC:{dlc} Data:{hex_data}){C_RESET}")
+
     def tx_input_loop():
         print(f"{C_YELLOW}⌨️  INTERACTIVE CAN INJECTOR ACTIVE:{C_RESET}")
-        print(f"{C_GRAY}   Type [1]=Low Beam, [2]=High Beam, [0]=Lights Off, [drl]=DRL, [fog]=Fog{C_RESET}")
-        print(f"{C_GRAY}   Type [h]=Hazard, [l]=Left, [r]=Right, [toff]=Turn Off, [w]=Wiper, [t]=Trunk{C_RESET}\n")
+        print(f"{C_GRAY}   Type [1]=Low Beam, [2]=High Beam, [0]=Lights Off, [drl]=DRL, [fog]=Fog, [fogoff]=Fog Off{C_RESET}")
+        print(f"{C_GRAY}   Type [h]=Hazard, [l]=Left, [r]=Right, [toff]=Turn Off, [w]=Wiper, [woff]=Wiper Off, [t]=Trunk Open, [tclose]=Trunk Close{C_RESET}\n")
         while True:
             try:
                 cmd = sys.stdin.readline()
@@ -480,55 +490,43 @@ def main():
                 cmd = cmd.strip().lower()
                 if not cmd: continue
 
-                payload = None
-                label = ""
                 if cmd in ('1', 'low'):
-                    payload = b"CAN:100:2:0264\r\n"
-                    label = "CMD_LIGHT: LOW BEAM (100%)"
+                    send_can("100", "2", "0264", "CMD_LIGHT: LOW BEAM (100%)")
                 elif cmd in ('2', 'high'):
-                    payload = b"CAN:100:2:0364\r\n"
-                    label = "CMD_LIGHT: HIGH BEAM (100%)"
+                    send_can("100", "2", "0364", "CMD_LIGHT: HIGH BEAM (100%)")
                 elif cmd in ('0', 'off'):
-                    payload = b"CAN:100:2:0000\r\n"
-                    label = "CMD_LIGHT: ALL LIGHTS OFF"
+                    send_can("100", "2", "0000", "CMD_LIGHT: ALL LIGHTS OFF")
                 elif cmd == 'drl':
-                    payload = b"CAN:100:2:0164\r\n"
-                    label = "CMD_LIGHT: DRL ON"
+                    send_can("100", "2", "0164", "CMD_LIGHT: DRL ON")
                 elif cmd == 'fog':
-                    payload = b"CAN:100:2:0464\r\n"
-                    label = "CMD_LIGHT: FOG ON"
+                    send_can("100", "2", "0464", "CMD_LIGHT: FOG ON")
+                elif cmd == 'fogoff':
+                    send_can("100", "2", "0500", "CMD_LIGHT: FOG OFF")
                 elif cmd in ('h', 'hazard'):
-                    payload = b"CAN:102:1:03\r\n"
-                    label = "CMD_TURN: HAZARD"
+                    send_can("102", "1", "03", "CMD_TURN: HAZARD")
                 elif cmd in ('l', 'left'):
-                    payload = b"CAN:102:1:01\r\n"
-                    label = "CMD_TURN: LEFT"
+                    send_can("102", "1", "01", "CMD_TURN: LEFT")
                 elif cmd in ('r', 'right'):
-                    payload = b"CAN:102:1:02\r\n"
-                    label = "CMD_TURN: RIGHT"
+                    send_can("102", "1", "02", "CMD_TURN: RIGHT")
                 elif cmd in ('toff', 'stopturn'):
-                    payload = b"CAN:102:1:00\r\n"
-                    label = "CMD_TURN: OFF"
+                    send_can("102", "1", "00", "CMD_TURN: OFF")
                 elif cmd in ('w', 'wiper'):
-                    payload = b"CAN:101:2:0300\r\n"
-                    label = "CMD_WIPER: NORMAL MODE"
+                    send_can("101", "2", "0300", "CMD_WIPER: NORMAL MODE")
                 elif cmd in ('woff',):
-                    payload = b"CAN:101:2:0000\r\n"
-                    label = "CMD_WIPER: OFF"
+                    send_can("101", "2", "0000", "CMD_WIPER: OFF")
                 elif cmd in ('t', 'trunk'):
-                    payload = b"CAN:103:1:01\r\n"
-                    label = "CMD_TRUNK: OPEN"
+                    send_can("103", "1", "01", "CMD_TRUNK: OPEN")
+                elif cmd in ('tclose',):
+                    send_can("103", "1", "02", "CMD_TRUNK: CLOSE")
                 else:
-                    if cmd.upper().startswith("CAN:"):
-                        payload = (cmd.upper() + "\r\n").encode('utf-8')
-                        label = f"RAW INJECTION: {cmd.upper()}"
+                    if cmd.upper().startswith("CAN:") or cmd.upper().startswith("TX:"):
+                        parts = cmd.strip().split(':')
+                        if len(parts) >= 4:
+                            send_can(parts[1], parts[2], parts[3], f"RAW INJECTION: 0x{parts[1]}")
+                        else:
+                            ser.write((cmd.upper() + "\r\n").encode('utf-8'))
                     else:
-                        print(f"{C_GRAY}Unknown command '{cmd}'. Available: 1, 2, 0, drl, fog, h, l, r, toff, w, t{C_RESET}")
-                        continue
-
-                if payload:
-                    ser.write(payload)
-                    print(f"{C_YELLOW}🚀 >>> [TX SENT] {label} ({payload.decode().strip()}){C_RESET}")
+                        print(f"{C_GRAY}Unknown command '{cmd}'. Available: 1, 2, 0, drl, fog, fogoff, h, l, r, toff, w, woff, t, tclose{C_RESET}")
             except Exception:
                 break
 
@@ -698,8 +696,16 @@ def main():
                 continue
 
             if can_id == "610":
-                print(f"{C_RED}{C_BOLD}[{ts}] ⚠️ [WATCHDOG]      ID:0x610 Data:{b}{C_RESET}")
-                print(f"{C_RED}{C_BOLD}           ↳ {decode_watchdog(b)}{C_RESET}")
+                is_recovery = (len(b) >= 2 and b[1] == 0)
+                node_name = NODE_NAMES.get(b[0], f"NODE_{b[0]}")
+                if is_recovery:
+                    offline_nodes.discard(node_name)
+                    print(f"{C_GREEN}{C_BOLD}[{ts}] ✅ [WATCHDOG]      ID:0x610 Data:{b}{C_RESET}")
+                    print(f"{C_GREEN}{C_BOLD}           ↳ {node_name} is RECOVERED and back ONLINE!{C_RESET}")
+                else:
+                    offline_nodes.add(node_name)
+                    print(f"{C_RED}{C_BOLD}[{ts}] ⚠️ [WATCHDOG]      ID:0x610 Data:{b}{C_RESET}")
+                    print(f"{C_RED}{C_BOLD}           ↳ {decode_watchdog(b)}{C_RESET}")
                 continue
 
             # ==================================================================
@@ -707,6 +713,9 @@ def main():
             # ==================================================================
             if can_id in ("700", "710", "720"):
                 node = {"700": "CENTRAL_ECU", "710": "FRONT_BCM", "720": "REAR_BCM"}.get(can_id, "NODE")
+                if node in offline_nodes:
+                    offline_nodes.discard(node)
+                    print(f"{C_GREEN}{C_BOLD}[{ts}] ✅ [NODE_ONLINE]   ID:0x{can_id} {node} is RECOVERED and back ONLINE!{C_RESET}")
                 print(f"{C_GRAY}[{ts}] 🩺 [HEARTBEAT]     ID:0x{can_id} Data:{b}{C_RESET}")
                 print(f"{C_GRAY}           ↳ {decode_heartbeat(b, node)}{C_RESET}")
                 continue

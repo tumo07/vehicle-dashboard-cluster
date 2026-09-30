@@ -72,7 +72,10 @@ void TurnSignal_Task(void){
     extern volatile uint32_t f411_last_can_cmd_tick;
     extern volatile uint8_t  f411_can_connected;
 
-    if (f411_can_connected && (currentTime - f411_last_can_cmd_tick < 1500)) {
+    if (currentTurnMode == CMD_TURN_OFF) {
+        flashState = 0;
+        lastFlashTime = currentTime;
+    } else if (f411_can_connected && (currentTime - f411_last_can_cmd_tick < 1500)) {
         // Đồng bộ 100% với nhịp phát của Central ECU
         flashState = (f411_cmd_blink_tick & 0x01);
     } else {

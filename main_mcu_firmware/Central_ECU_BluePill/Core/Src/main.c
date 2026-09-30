@@ -123,10 +123,15 @@ static VehicleState_t g_vehicle = {
 
 static DtcEntry_t g_dtc_store[DTC_STORE_SIZE];
 static uint8_t    g_dtc_count  = 0U;
-static uint32_t   g_last_hb_front = 0U;
-static uint32_t   g_last_hb_rear  = 0U;
-static uint8_t    g_btn_prev   = 0U;
-static uint8_t    g_uptime_cnt = 0U;
+static uint32_t   g_last_hb_front    = 0U;
+static uint32_t   g_last_hb_rear     = 0U;
+static uint8_t    g_front_offline    = 0U;
+static uint8_t    g_rear_offline     = 0U;
+static uint8_t    g_front_turn_req   = 0U;
+static uint8_t    g_rear_turn_req    = 0U;
+static uint8_t    g_qt_turn_override = 0U;
+static uint8_t    g_btn_prev         = 0U;
+static uint8_t    g_uptime_cnt       = 0U;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -302,7 +307,7 @@ static void Send_Heartbeat(void)
 static void Send_BlinkTick(void)
 {
     g_vehicle.blink_phase ^= 1U;
-    uint8_t tick[1] = { 0x01U };
+    uint8_t tick[1] = { g_vehicle.blink_phase ? 0x01U : 0x00U };
     CAN_Send(CAN_ID_BLINK_TICK, tick, 1U);
     uint8_t phase = 0U;
     if ((g_vehicle.turn_armed == CMD_TURN_LEFT) || (g_vehicle.turn_armed == CMD_TURN_HAZARD)) {
@@ -313,6 +318,28 @@ static void Send_BlinkTick(void)
     }
     uint8_t bp[1] = { phase };
     CAN_Send(CAN_ID_STATUS_TURN_BLINK, bp, 1U);
+}
+
+static void Update_Turn_Coordination(void)
+{
+    uint8_t l = ((g_front_turn_req & FRONT_ACT_LTURN) != 0U) || ((g_rear_turn_req & REAR_ACT_LTURN) != 0U);
+    uint8_t r = ((g_front_turn_req & FRONT_ACT_RTURN) != 0U) || ((g_rear_turn_req & REAR_ACT_RTURN) != 0U);
+
+    if (l || r) {
+        g_qt_turn_override = 0U; /* Hardware buttons take precedence */
+    } else if (g_qt_turn_override != 0U) {
+        return; /* Keep Qt command active if no physical buttons are pressed */
+    }
+
+    if (l && r) {
+        if (g_vehicle.turn_armed != CMD_TURN_HAZARD) Execute_TurnCmd(CMD_TURN_HAZARD);
+    } else if (l) {
+        if (g_vehicle.turn_armed != CMD_TURN_LEFT) Execute_TurnCmd(CMD_TURN_LEFT);
+    } else if (r) {
+        if (g_vehicle.turn_armed != CMD_TURN_RIGHT) Execute_TurnCmd(CMD_TURN_RIGHT);
+    } else {
+        if (g_vehicle.turn_armed != CMD_TURN_OFF) Execute_TurnCmd(CMD_TURN_OFF);
+    }
 }
 
 static ValidationResult_t Validate_LightCmd(CmdLight_t cmd)
@@ -946,7 +973,17 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
         case CAN_ID_CMD_TURN_SIGNAL:
             result = Validate_TurnCmd((CmdTurn_t)rx_data[0]);
             Send_ACK(0x02U, (result == VALIDATION_OK) ? ACK_STATUS_APPROVED : ACK_STATUS_REJECTED, result);
-            if (result == VALIDATION_OK) { Execute_TurnCmd((CmdTurn_t)rx_data[0]); }
+            if (result == VALIDATION_OK) {
+                if ((CmdTurn_t)rx_data[0] == CMD_TURN_OFF) {
+                    g_qt_turn_override = 0U;
+                    g_front_turn_req   = 0U;
+                    g_rear_turn_req    = 0U;
+                    Execute_TurnCmd(CMD_TURN_OFF);
+                } else {
+                    g_qt_turn_override = 1U;
+                    Execute_TurnCmd((CmdTurn_t)rx_data[0]);
+                }
+            }
             break;
         case CAN_ID_CMD_TRUNK_CONTROL:
             result = Validate_TrunkCmd((CmdTrunk_t)rx_data[0]);
@@ -964,8 +1001,14 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                 else                                  { g_vehicle.light_flags &= (uint8_t)(~STATUS_HEADLIGHT_ON); }
                 if ((f & FRONT_ACT_DRL) != 0U)        { g_vehicle.light_flags |= STATUS_DRL_ON; }
                 else                                  { g_vehicle.light_flags &= (uint8_t)(~STATUS_DRL_ON); }
+                if ((f & FRONT_ACT_HIGH_BEAM) != 0U)  { g_vehicle.light_flags |= STATUS_HIGH_BEAM_ON; }
+                else                                  { g_vehicle.light_flags &= (uint8_t)(~STATUS_HIGH_BEAM_ON); }
                 if ((f & FRONT_ACT_FOG) != 0U)        { g_vehicle.light_flags |= STATUS_FOG_ON; }
                 else                                  { g_vehicle.light_flags &= (uint8_t)(~STATUS_FOG_ON); }
+
+                g_front_turn_req = f & (FRONT_ACT_LTURN | FRONT_ACT_RTURN);
+                Update_Turn_Coordination();
+                Broadcast_LightState();
             }
             if (dlc >= 2U) { g_vehicle.wiper_mode = (CmdWiper_t)rx_data[1]; }
             break;
@@ -979,17 +1022,10 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                     g_vehicle.state_flags |= STATE_TRUNK_AJAR;
                 }
                 Broadcast_TrunkState();
-                
-                /* Turn Signal inputs from Rear BCM (hardware pivot) */
-                if (g_vehicle.turn_armed != CMD_TURN_HAZARD) {
-                    if (rx_data[0] & REAR_ACT_LTURN) {
-                        if (g_vehicle.turn_armed != CMD_TURN_LEFT) Execute_TurnCmd(CMD_TURN_LEFT);
-                    } else if (rx_data[0] & REAR_ACT_RTURN) {
-                        if (g_vehicle.turn_armed != CMD_TURN_RIGHT) Execute_TurnCmd(CMD_TURN_RIGHT);
-                    } else {
-                        if (g_vehicle.turn_armed != CMD_TURN_OFF) Execute_TurnCmd(CMD_TURN_OFF);
-                    }
-                }
+
+                /* Dual-node coordinated turn requests */
+                g_rear_turn_req = rx_data[0] & (REAR_ACT_LTURN | REAR_ACT_RTURN);
+                Update_Turn_Coordination();
             }
             break;
         case CAN_ID_REPORT_REAR_SENSORS:
@@ -1006,20 +1042,55 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
         case CAN_ID_FAULT_FRONT_BCM:
         case CAN_ID_FAULT_REAR_BCM:
             if (dlc >= 5U) {
-                uint8_t src          = (id == CAN_ID_FAULT_FRONT_BCM) ? NODE_ID_FRONT_BCM : NODE_ID_REAR_BCM;
-                DTC_Severity_t sev   = (DTC_Severity_t)rx_data[0];
-                uint16_t dtc         = PACK_U16(rx_data[1], rx_data[2]);
-                uint8_t cnt          = rx_data[3];
-                SimpleErrorCode_t sc = (SimpleErrorCode_t)rx_data[4];
-                Log_DTC(src, sev, dtc, cnt, sc);
+                /* Noise rejection: valid DTC severities are strictly 0..3 */
+                if (rx_data[0] <= 3U) {
+                    uint8_t src          = (id == CAN_ID_FAULT_FRONT_BCM) ? NODE_ID_FRONT_BCM : NODE_ID_REAR_BCM;
+                    DTC_Severity_t sev   = (DTC_Severity_t)rx_data[0];
+                    uint16_t dtc         = PACK_U16(rx_data[1], rx_data[2]);
+                    uint8_t cnt          = rx_data[3];
+                    SimpleErrorCode_t sc = (SimpleErrorCode_t)rx_data[4];
+                    Log_DTC(src, sev, dtc, cnt, sc);
+                }
             }
             break;
         /* GROUP G: BCM Heartbeats */
         case CAN_ID_HEARTBEAT_FRONT_BCM:
             g_last_hb_front = HAL_GetTick();
+            if (g_front_offline) {
+                g_front_offline = 0U;
+                uint8_t wd[2] = { NODE_ID_FRONT_BCM, 0U };
+                CAN_Send(CAN_ID_WATCHDOG_ALERT, wd, 2U);
+                for (uint8_t i = 0U; i < DTC_STORE_SIZE; i++) {
+                    if ((g_dtc_store[i].active != 0U) && (g_dtc_store[i].node_id == NODE_ID_FRONT_BCM) &&
+                        (g_dtc_store[i].dtc_code == (uint16_t)DTC_C1002)) {
+                        g_dtc_store[i].active = 0U;
+                        if (g_dtc_count > 0U) { g_dtc_count--; }
+                        break;
+                    }
+                }
+                if (g_dtc_count == 0U) { g_vehicle.state_flags &= (uint8_t)(~STATE_DTC_ACTIVE); }
+                uint8_t clr[2] = { NODE_ID_FRONT_BCM, 0U };
+                CAN_Send(CAN_ID_BANNER_CLEAR, clr, 2U);
+            }
             break;
         case CAN_ID_HEARTBEAT_REAR_BCM:
             g_last_hb_rear = HAL_GetTick();
+            if (g_rear_offline) {
+                g_rear_offline = 0U;
+                uint8_t wd[2] = { NODE_ID_REAR_BCM, 0U };
+                CAN_Send(CAN_ID_WATCHDOG_ALERT, wd, 2U);
+                for (uint8_t i = 0U; i < DTC_STORE_SIZE; i++) {
+                    if ((g_dtc_store[i].active != 0U) && (g_dtc_store[i].node_id == NODE_ID_REAR_BCM) &&
+                        (g_dtc_store[i].dtc_code == (uint16_t)DTC_C1003)) {
+                        g_dtc_store[i].active = 0U;
+                        if (g_dtc_count > 0U) { g_dtc_count--; }
+                        break;
+                    }
+                }
+                if (g_dtc_count == 0U) { g_vehicle.state_flags &= (uint8_t)(~STATE_DTC_ACTIVE); }
+                uint8_t clr[2] = { NODE_ID_REAR_BCM, 0U };
+                CAN_Send(CAN_ID_BANNER_CLEAR, clr, 2U);
+            }
             break;
         default:
             break;
@@ -1039,14 +1110,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     else if (htim->Instance == TIM4) {
         uint32_t now = HAL_GetTick();
         if ((now - g_last_hb_front) > BCM_TIMEOUT_MS) {
-            uint8_t d[2] = { NODE_ID_FRONT_BCM, 1U };
-            CAN_Send(CAN_ID_WATCHDOG_ALERT, d, 2U);
-            Log_DTC(NODE_ID_FRONT_BCM, DTC_SEVERITY_ERROR, (uint16_t)DTC_C1002, 1U, ERR_NODE_TIMEOUT);
+            if (!g_front_offline) {
+                g_front_offline = 1U;
+                uint8_t d[2] = { NODE_ID_FRONT_BCM, 1U };
+                CAN_Send(CAN_ID_WATCHDOG_ALERT, d, 2U);
+                Log_DTC(NODE_ID_FRONT_BCM, DTC_SEVERITY_ERROR, (uint16_t)DTC_C1002, 1U, ERR_NODE_TIMEOUT);
+            }
         }
         if ((now - g_last_hb_rear) > BCM_TIMEOUT_MS) {
-            uint8_t d[2] = { NODE_ID_REAR_BCM, 1U };
-            CAN_Send(CAN_ID_WATCHDOG_ALERT, d, 2U);
-            Log_DTC(NODE_ID_REAR_BCM, DTC_SEVERITY_ERROR, (uint16_t)DTC_C1003, 1U, ERR_NODE_TIMEOUT);
+            if (!g_rear_offline) {
+                g_rear_offline = 1U;
+                uint8_t d[2] = { NODE_ID_REAR_BCM, 1U };
+                CAN_Send(CAN_ID_WATCHDOG_ALERT, d, 2U);
+                Log_DTC(NODE_ID_REAR_BCM, DTC_SEVERITY_ERROR, (uint16_t)DTC_C1003, 1U, ERR_NODE_TIMEOUT);
+            }
         }
     }
 }

@@ -33,7 +33,7 @@ static mCrtlWiper_t mWiper = {
     .lastDebounceTimeWiper = 0,
     .lastBtnWiperState     = GPIO_PIN_SET,
     .wiperTime             = 0,
-    .cachedRainValue       = 0,
+    .cachedRainValue       = 3500,
     .lastDelayTime         = 0,
 };
 
@@ -94,15 +94,15 @@ static uint16_t Read_RainSensor_Raw(void) {
     return adc_dma_buffer[0];
 }
 
-// Hàm tính % Cảm biến mưa (0-600: Khô 0%, 600-1800: Mưa nhỏ 30%, 1800-3000: Mưa vừa 60%, >3000: Mưa to 100%)
+// Hàm tính % Cảm biến mưa (Đúng theo độ nhạy chuẩn tuần trước: >3000: Khô 0%, 2400-3000: Mưa nhỏ 30%, 1800-2400: Mưa vừa 60%, <=1800: Mưa to 100%)
 uint8_t Get_RainSensor_Percent(void) {
     uint16_t rainVal = mWiper.cachedRainValue;
 
-    if (rainVal < 600) {
-        return 0; // Dry / No rain: 0%
-    } else if (rainVal < 1800) {
+    if (rainVal > 3000) {
+        return 0; // Dry: 0% rain
+    } else if (rainVal > 2400) {
         return 30; // Light rain: 30%
-    } else if (rainVal < 3000) {
+    } else if (rainVal > 1800) {
         return 60; // Medium rain: 60%
     } else {
         return 100; // Heavy rain: 100%
@@ -325,23 +325,19 @@ void Wiper_Task(void) {
         {
             uint16_t rainValue = mWiper.cachedRainValue;
 
-            if (rainValue < 600) {
-                // Khô ráo / Không mưa (0 - 600): Gạt mưa đứng yên đậu ở vị trí gốc
+            if (rainValue > 3000) {
                 Wiper_UpdateOutputs(GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_SET);
                 Servo_SetAngle(1000);
-                mWiper.wiperTime = currentTick;
-            } else if (rainValue < 1800) {
-                // Mưa nhỏ (600 - 1800): Gạt gián đoạn ngắt quãng (gạt 600ms, nghỉ 3s)
+            } else if (rainValue > 2400) {
                 Wiper_UpdateOutputs(GPIO_PIN_SET, GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_SET);
-                if (currentTick - mWiper.wiperTime < 600) {
+                if (currentTick - mWiper.wiperTime < 900) {
                     Servo_SetAngle(2000);
-                } else if (currentTick - mWiper.wiperTime < 3600) {
+                } else if (currentTick - mWiper.wiperTime < 1800) {
                     Servo_SetAngle(1000);
                 } else {
                     mWiper.wiperTime = currentTick;
                 }
-            } else if (rainValue < 3000) {
-                // Mưa vừa (1800 - 3000): Gạt tốc độ bình thường (chu kỳ 1.2s)
+            } else if (rainValue > 1800) {
                 Wiper_UpdateOutputs(GPIO_PIN_SET, GPIO_PIN_SET, GPIO_PIN_RESET, GPIO_PIN_SET);
                 if (currentTick - mWiper.wiperTime < 600) {
                     Servo_SetAngle(2000);
@@ -351,7 +347,6 @@ void Wiper_Task(void) {
                     mWiper.wiperTime = currentTick;
                 }
             } else {
-                // Mưa to (> 3000): Gạt tốc độ nhanh liên tục (chu kỳ 0.6s)
                 Wiper_UpdateOutputs(GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_SET, GPIO_PIN_SET);
                 if (currentTick - mWiper.wiperTime < 300) {
                     Servo_SetAngle(2000);

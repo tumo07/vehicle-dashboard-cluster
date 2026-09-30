@@ -87,6 +87,9 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     uint32_t id  = RxHeader.StdId;
     uint8_t  dlc = (uint8_t)RxHeader.DLC;
 
+    /* Nháy đèn LED User trên bo BluePill (PC13) báo hiệu có gói tin CAN đến */
+    HAL_GPIO_TogglePin(LED_CAN_DEBUG_GPIO_Port, LED_CAN_DEBUG_Pin);
+
     /* ── EXEC_FRONT_LIGHTS (0x200): Đèn trước ─────────────────────────── */
     if (id == CAN_ID_EXEC_FRONT_LIGHTS && dlc >= 2) {
         rx_cmd_light_mask       = rxData[0];

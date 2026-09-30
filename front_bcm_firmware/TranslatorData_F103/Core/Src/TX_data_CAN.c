@@ -60,6 +60,7 @@ HAL_StatusTypeDef CAN_Transmit_Direct(CAN_HandleTypeDef *hcan, uint16_t stdId, u
         return HAL_BUSY;
     }
 
+    HAL_GPIO_TogglePin(LED_CAN_DEBUG_GPIO_Port, LED_CAN_DEBUG_Pin);
     return HAL_CAN_AddTxMessage(hcan, &TxHeader, (uint8_t *)pData, &TxMailbox);
 }
 
@@ -78,6 +79,7 @@ void CAN_Send_Heartbeat(CAN_HandleTypeDef *hcan, uint8_t counter, uint8_t flags)
     while (HAL_CAN_GetTxMailboxesFreeLevel(hcan) == 0) {
         if (HAL_GetTick() - timeout > 2) return;
     }
+    HAL_GPIO_TogglePin(LED_CAN_DEBUG_GPIO_Port, LED_CAN_DEBUG_Pin);
     HAL_CAN_AddTxMessage(hcan, &TxHeader, txData, &pTxMailbox);
 }
 

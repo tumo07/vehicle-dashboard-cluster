@@ -140,6 +140,24 @@ def decode_heartbeat(b, node_name):
     if b[1] & 0x08: bits.append("DTC_ACTIVE ⚠️")
     return f"[{node_name}] uptime={b[0]}s flags=[{' | '.join(bits) or 'NONE'}]"
 
+def decode_0x410(b):
+    if len(b) < 3: return ""
+    flags = []
+    if b[0] & 0x01: flags.append("BRAKE")
+    if b[0] & 0x02: flags.append("LEFT_TURN")
+    if b[0] & 0x04: flags.append("RIGHT_TURN")
+    if b[0] & 0x08: flags.append("TRUNK_MTR_ACT")
+    f_str = " | ".join(flags) if flags else "NONE"
+    mtr = {0: "IDLE", 1: "OPENING", 2: "CLOSING", 3: "STALLED"}.get(b[1], "?")
+    return f"Flags=[{f_str}]  Motor={mtr}  Pos={b[2]}%"
+
+def decode_0x411(b):
+    if len(b) < 4: return ""
+    dist = (b[0] << 8) | b[1]
+    dist_str = f"{dist}cm" if dist != 0xFFFF else "NO_OBJ"
+    hall = "OPEN" if b[2] == 1 else "CLOSED"
+    return f"Radar={dist_str}  Trunk_Hall={hall}  ParkLvl={b[3]}"
+
 def main():
     try:
         ser = serial.Serial(PORT, BAUDRATE, timeout=1)
@@ -221,6 +239,16 @@ def main():
             if can_id == "401":
                 print(f"\033[93m🌡️ [SENSOR] ID:0x401 Data:{b}\033[0m")
                 print(f"\033[93m        ↳ {decode_0x401(b)}\033[0m")
+                continue
+
+            if can_id == "410":
+                print(f"\033[92;1m🚗 [REAR_ST] ID:0x410 Data:{b}\033[0m")
+                print(f"\033[92m         ↳ {decode_0x410(b)}\033[0m")
+                continue
+
+            if can_id == "411":
+                print(f"\033[93m🌡️ [REAR_SN] ID:0x411 Data:{b}\033[0m")
+                print(f"\033[93m         ↳ {decode_0x411(b)}\033[0m")
                 continue
 
             if can_id.startswith("10"):

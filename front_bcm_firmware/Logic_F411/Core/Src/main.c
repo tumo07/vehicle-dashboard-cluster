@@ -262,6 +262,20 @@ int main(void)
         Headlight_Task();
         Front_BCM_Periodic_TX_Task();
 
+        // 3. Cập nhật đèn LED Diagnostic trên board (LD4 Green = CAN OK, LD5 Red = Fail-Safe)
+        extern volatile uint8_t f411_can_connected;
+        extern volatile uint8_t f411_failsafe_active;
+        if (f411_can_connected && !f411_failsafe_active) {
+            HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_RESET);
+        } else if (f411_failsafe_active) {
+            HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_SET);
+        } else {
+            HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_RESET);
+        }
+
     }
   /* USER CODE END 3 */
 }

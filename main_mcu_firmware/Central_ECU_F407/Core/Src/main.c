@@ -382,27 +382,33 @@ static ValidationResult_t Validate_TrunkCmd(CmdTrunk_t cmd)
 /* ── Command execution ───────────────────────────────────────────────────── */
 static void Execute_LightCmd(CmdLight_t cmd, uint8_t brightness)
 {
-    uint8_t exec = 0;
     switch (cmd) {
         case CMD_LIGHT_OFF:
             g_veh.light_flags &= ~(STATUS_HEADLIGHT_ON|STATUS_DRL_ON|
                                    STATUS_HIGH_BEAM_ON|STATUS_FOG_ON);
             break;
         case CMD_LIGHT_DRL_ON:
-            g_veh.light_flags |= STATUS_DRL_ON; exec = EXEC_FRONT_DRL; break;
+            g_veh.light_flags |= STATUS_DRL_ON; break;
         case CMD_LIGHT_HEADLIGHT_LOW:
             g_veh.light_flags |= STATUS_HEADLIGHT_ON;
             g_veh.light_flags &= ~STATUS_HIGH_BEAM_ON;
-            exec = EXEC_FRONT_HEADLIGHT; break;
+            break;
         case CMD_LIGHT_HEADLIGHT_HIGH:
             g_veh.light_flags |= STATUS_HEADLIGHT_ON|STATUS_HIGH_BEAM_ON;
-            exec = EXEC_FRONT_HEADLIGHT|EXEC_FRONT_HIGH_BEAM; break;
+            break;
         case CMD_LIGHT_FOG_ON:
-            g_veh.light_flags |= STATUS_FOG_ON; exec = EXEC_FRONT_FOG; break;
+            g_veh.light_flags |= STATUS_FOG_ON; break;
         case CMD_LIGHT_FOG_OFF:
             g_veh.light_flags &= ~STATUS_FOG_ON; break;
         default: break;
     }
+    
+    uint8_t exec = 0;
+    if (g_veh.light_flags & STATUS_DRL_ON)       exec |= EXEC_FRONT_DRL;
+    if (g_veh.light_flags & STATUS_HEADLIGHT_ON) exec |= EXEC_FRONT_HEADLIGHT;
+    if (g_veh.light_flags & STATUS_HIGH_BEAM_ON) exec |= EXEC_FRONT_HIGH_BEAM;
+    if (g_veh.light_flags & STATUS_FOG_ON)       exec |= EXEC_FRONT_FOG;
+
     uint8_t d[2] = { exec, brightness };
     CAN_Send(CAN_ID_EXEC_FRONT_LIGHTS, d, 2U);
     Broadcast_LightState();

@@ -290,18 +290,26 @@
               <tr><td class="font-mono">PB6</td><td>TIM4_CH1 PWM</td><td>Trunk SG90 Servo (0&deg;=Closed, 90&deg;=Open)</td></tr>
               <tr><td class="font-mono">PB12</td><td>GPIO Out</td><td>HC-SR04 TRIG (10&micro;s trigger pulse)</td></tr>
               <tr><td class="font-mono text-red-400 font-bold">PB13</td><td>GPIO In</td><td>HC-SR04 ECHO (<b>Use 5V &rarr; 3.3V divider!</b>)</td></tr>
-              <tr><td class="font-mono">PA0</td><td>Button In</td><td>Brake Pedal simulation</td></tr>
-              <tr><td class="font-mono">PA1</td><td>Button In</td><td>Trunk Manual Switch</td></tr>
+              <tr><td class="font-mono">PA0</td><td>Button In</td><td>Brake Pedal simulation (Active HIGH)</td></tr>
+              <tr><td class="font-mono">PA1</td><td>Button In</td><td>Trunk Manual Switch (Active HIGH)</td></tr>
               <tr><td class="font-mono">PA4</td><td>Switch In</td><td>Reverse Gear Switch (R simulation)</td></tr>
-              <tr><td class="font-mono">PB0</td><td>LED Out</td><td>Brake Light (High intensity) / Tail Light</td></tr>
-              <tr><td class="font-mono">PA2</td><td>LED Out</td><td>Reverse Light</td></tr>
-              <tr><td class="font-mono">PB1/PB3</td><td>LED Out</td><td>Rear Turn Signals (Left / Right)</td></tr>
+              <tr><td class="font-mono text-emerald-500 font-bold">PA5</td><td>Button In</td><td>Rear Left Turn Signal Button (Toggle, Active HIGH)</td></tr>
+              <tr><td class="font-mono text-emerald-500 font-bold">PA6</td><td>Button In</td><td>Rear Right Turn Signal Button (Toggle, Active HIGH)</td></tr>
+              <tr><td class="font-mono">PB0</td><td>LED Out</td><td>Brake Light (Solid ON during braking)</td></tr>
+              <tr><td class="font-mono">PA2</td><td>LED Out</td><td>Reverse Buzzer / LED Warning</td></tr>
+              <tr><td class="font-mono">PB1/PB3</td><td>LED Out</td><td>Rear Turn Signals (PB1 Left, PB3 Right)</td></tr>
             </tbody>
           </table>
         </div>
         <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)] text-xs space-y-2">
-          <h3 class="font-bold text-sm text-[var(--foreground)]">🧳 Smart Kick Trunk Calibration</h3>
-          <p>• <b>Trigger Distance:</b> Strictly calibrated to <b>&le; 8 cm</b> (reduced from 15cm) to ensure hands-free kick opening without accidental road spray triggers.</p>
+          <h3 class="font-bold text-sm text-[var(--foreground)]">🚨 Turn Signal & Brake Coordination</h3>
+          <p>• <b>Front & Rear Phase Sync:</b> Turn signals decode level phase from Central ECU's <code>0x130 BLINK_TICK</code>. Both Front and Rear blink synchronously at 1Hz (500ms ON / 500ms OFF) with zero toggle drift.</p>
+          <p>• <b>Push-to-Toggle Debouncing (PA5/PA6):</b> 50ms edge debouncing with instant <code>0x410</code> dispatch ensures immediate response without holding the button.</p>
+          <p>• <b>FMVSS 108 Brake Coordination:</b> When brake pedal (PA0) is pressed, dedicated brake (PB0) turns solid ON, while active turn signals continue flashing without interruption.</p>
+          <p>• <b>Fail-Safe Blinking:</b> Automatic 500ms local blink fallback if CAN ticks stop for &gt; 1500ms.</p>
+          <h3 class="font-bold text-sm text-[var(--foreground)] mt-2">🧳 Parking Radar & Kick Trunk</h3>
+          <p>• <b>Desktop Demo Radar Limits:</b> Critical &le; 10cm, Warning &le; 20cm, Caution &le; 30cm, Clear &gt; 30cm.</p>
+          <p>• <b>Kick Trunk Calibration:</b> Calibrated to <b>2–8 cm</b> for hands-free kick opening without false triggers.</p>
           <p>• <b>Safety Interlock:</b> Central ECU unconditionally denies trunk opening if Vehicle Speed &gt; 5 km/h or Gear is in Drive/Reverse.</p>
         </div>
       </div>

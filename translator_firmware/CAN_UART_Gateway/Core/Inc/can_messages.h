@@ -60,7 +60,7 @@ extern "C" {
 #define CAN_ID_CMD_LIGHT_CONTROL    0x100U  /* DLC:2 Byte0:CmdLight_t Byte1:brightness 0-100% */
 #define CAN_ID_CMD_WIPER_CONTROL    0x101U  /* DLC:2 Byte0:CmdWiper_t Byte1:0x01=spray */
 #define CAN_ID_CMD_TURN_SIGNAL      0x102U  /* DLC:1 Byte0:CmdTurn_t */
-#define CAN_ID_CMD_TRUNK_CONTROL    0x103U  /* DLC:1 Byte0:CmdTrunk_t — validated by Central ECU */
+#define CAN_ID_CMD_TRUNK_CONTROL    0x103U  /* DLC:1 Byte0:CmdTrunk_t â€” validated by Central ECU */
 #define CAN_ID_CMD_DIAGNOSTIC       0x104U  /* DLC:2-8 Byte0:DiagCmd_t Byte1-7:params */
 #define CAN_ID_CMD_ACK              0x105U
 /* Central ECU -> Qt, within 10ms of any GROUP A message
@@ -119,7 +119,7 @@ extern "C" {
 
 #define CAN_ID_REPORT_FRONT_SENSORS 0x401U
 /* DLC:2 every 500ms
- * Byte0: ambient light 0-100%
+ * Byte0: rain sensor 0-100% (NOTE: replaced ambient light)
  * Byte1: washer fluid 0-100% */
 
 #define CAN_ID_REPORT_REAR_STATUS   0x410U

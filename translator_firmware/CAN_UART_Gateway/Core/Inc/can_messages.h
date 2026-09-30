@@ -306,9 +306,9 @@ typedef enum {
     PARKING_CRITICAL = 0x03   /* 0-30 cm   - red + audio */
 } ParkingLevel_t;
 
-#define DIST_THRESHOLD_CAUTION_CM   100U
-#define DIST_THRESHOLD_WARNING_CM    60U
-#define DIST_THRESHOLD_CRITICAL_CM   30U
+#define DIST_THRESHOLD_CAUTION_CM    30U
+#define DIST_THRESHOLD_WARNING_CM    20U
+#define DIST_THRESHOLD_CRITICAL_CM   10U
 #define DIST_MAX_RANGE_CM           400U
 #define DIST_NO_OBJECT             0xFFFFU
 

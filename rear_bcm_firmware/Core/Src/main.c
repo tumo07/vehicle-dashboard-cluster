@@ -172,11 +172,11 @@ int main(void)
 
       if (effective_reversing == 1) {
           // --- NGỮ CẢNH 1: ĐANG LÙI XE (PARKING SENSOR) ---
-          if (distance_cm > 0 && distance_cm <= 20) {
+          if (distance_cm > 0 && distance_cm <= DIST_THRESHOLD_CRITICAL_CM) {
               HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
           }
-          else if (distance_cm > 20 && distance_cm <= 100) {
-              uint32_t beep_interval = distance_cm * 5;
+          else if (distance_cm > DIST_THRESHOLD_CRITICAL_CM && distance_cm <= DIST_THRESHOLD_CAUTION_CM) {
+              uint32_t beep_interval = distance_cm * 8;
               if (current_time - last_beep_time >= beep_interval) {
                   HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);
                   last_beep_time = current_time;

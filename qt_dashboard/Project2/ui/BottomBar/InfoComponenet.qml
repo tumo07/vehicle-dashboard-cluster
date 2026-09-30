@@ -110,14 +110,14 @@ Item {
                 Layout.preferredHeight: 30
                 source: {
                     switch (parkingLevel) {
-                    case 0x00: // PARKING_CLEAR: > 100 cm
+                    case 0x00: // PARKING_CLEAR: > 30 cm
                         return "../assets/reverse-far.png"
 
-                    case 0x01: // PARKING_CAUTION: 61–100 cm
+                    case 0x01: // PARKING_CAUTION: 21–30 cm
                         return "../assets/reverse-med.png"
 
-                    case 0x02: // PARKING_WARNING: 31–60 cm
-                    case 0x03: // PARKING_CRITICAL: 0–30 cm
+                    case 0x02: // PARKING_WARNING: 11–20 cm
+                    case 0x03: // PARKING_CRITICAL: 0–10 cm
                         return "../assets/reverse-close.png"
 
                     default:

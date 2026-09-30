@@ -190,7 +190,7 @@ int main(void)
           // --- NGỮ CẢNH 2: SMART KICK TRUNK (CHỈ GỬI REQUEST, KHÔNG TỰ QUAY SERVO) ---
           HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
 
-          if (distance_cm > 2 && distance_cm <= 15) {
+          if (distance_cm > 2 && distance_cm <= 8) {
               // CHỐNG NHIỄU: Chỉ nhận diện khi rút chân/tay ra rồi mới đưa vào lại (foot_in_zone == 0)
               if (foot_in_zone == 0 && (current_time - last_kick_time > 2000)) {
                   // Gửi yêu cầu đóng/mở cốp lên Central ECU (0x103) để Central ECU xét duyệt an toàn

@@ -176,6 +176,8 @@
           <p>• <b>TIM6 (100ms):</b> Master sample loop for ADC potentiometers, vehicle state broadcast (0x300), and Central Heartbeat (0x700).</p>
           <p>• <b>TIM7 (500ms):</b> Turn Signal Synchronization Pulse (0x130 Blink Tick).</p>
           <p>• <b>Multi-beam Light Bitmask Accumulator:</b> Central ECU dynamically accumulates active lights into <code>EXEC_FRONT_LIGHTS</code> (0x200) so DRL, Low Beam, High Beam, and Fog can stay lit concurrently.</p>
+          <p>• <b>Watchdog Timeout (2500ms):</b> Raised threshold from 500ms to 2500ms to eliminate false alarms while guaranteeing strict 1000ms node fault detection.</p>
+          <p>• <b>PA0 USER Button:</b> Cycles lighting states (Off &rarr; Low Beam &rarr; High Beam &rarr; Fog) and immediately transmits <code>0x200</code> over CAN.</p>
         </div>
       </div>
     </div>
@@ -236,6 +238,36 @@
             <div class="font-bold text-amber-500">⚠️ Critical Wiring Rule:</div>
             <p>The F411 <b>never touches the CAN wires</b>. It communicates strictly through UART to the F103. If you connect PA2 to PA9 directly, you wired TX-to-TX and the heartbeat will die! Always wire <b>PA2 &rarr; PA10</b> and <b>PA3 &rarr; PA9</b>.</p>
           </div>
+        </div>
+      </div>
+
+      <!-- Hardware Diagnostics & Button Quick Check -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-2">
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)]">
+          <div class="font-bold text-emerald-400 mb-1">🟢 Visual LED Indicators</div>
+          <ul class="space-y-1 text-[var(--muted-foreground)]">
+            <li>• <b>PC13 (BluePill):</b> Blinks on every CAN RX/TX packet (1Hz heartbeat + 200ms reports).</li>
+            <li>• <b>LD4 / PD12 (F411):</b> Solid GREEN when CAN link with Central is alive & healthy.</li>
+            <li>• <b>LD5 / PD14 (F411):</b> RED if CAN link lost &gt; 1.2s (ASIL-B fail-safe triggers 100% low beam).</li>
+            <li>• <b>PE7 (F411):</b> DTC error indicator LED.</li>
+          </ul>
+        </div>
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)]">
+          <div class="font-bold text-amber-400 mb-1">💡 Headlight & Fog Controls</div>
+          <ul class="space-y-1 text-[var(--muted-foreground)]">
+            <li>• <b>PE14:</b> Master Headlight ON/OFF toggle switch.</li>
+            <li>• <b>PE13:</b> Toggle Low Beam (PB7 PWM) &harr; High Beam (PB8 PWM).</li>
+            <li>• <b>PE15:</b> Toggle Fog Lamp (PE12).</li>
+            <li>• <b>PC1:</b> Analog Dimmer Potentiometer (ADC1_IN11) controls brightness duty cycle.</li>
+          </ul>
+        </div>
+        <div class="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)]">
+          <div class="font-bold text-blue-400 mb-1">⚡ Turn & Wiper Controls</div>
+          <ul class="space-y-1 text-[var(--muted-foreground)]">
+            <li>• <b>PB0 / PB1:</b> Left / Right Turn Signal Buttons.</li>
+            <li>• <b>PB2:</b> Hazard Warning Toggle (flashes PC4 & PC5 synchronously via CAN 0x130).</li>
+            <li>• <b>PE8:</b> Wiper Mode Button (OFF &rarr; INT &rarr; LOW &rarr; HIGH).</li>
+          </ul>
         </div>
       </div>
     </div>
@@ -379,10 +411,22 @@
         </div>
 
         <div class="bg-[var(--background)] p-4 rounded-xl border border-[var(--border)] text-xs space-y-2">
-          <h3 class="font-bold text-sm text-[var(--foreground)]">2. Live Bus Monitoring Tool</h3>
-          <p>We provide a dedicated Python script that decodes 100% of CAN v3.0 messages without spamming duplicate heartbeats:</p>
+          <h3 class="font-bold text-sm text-[var(--foreground)]">2. Live Bus Monitor & Interactive Injector</h3>
+          <p>We provide a dedicated Python script that decodes 100% of CAN v3.0 messages without spamming duplicate heartbeats, plus live keyboard command injection:</p>
           <pre class="bg-[var(--card)] p-2 rounded border border-[var(--border)] font-mono text-[11px]">python front_bcm_firmware/can_monitor.py COM9</pre>
-          <p class="text-[var(--muted-foreground)]">• Instantly logs all user button commands, approvals, and fault alerts with millisecond timestamps.</p>
+          <div class="font-bold text-emerald-400 mt-2">⌨️ Live Injector Keystrokes:</div>
+          <table class="w-full text-[11px] border border-[var(--border)] pin-table">
+            <thead class="bg-[var(--card)]"><tr><th>Key</th><th>Action</th><th>CAN Frame Injected</th></tr></thead>
+            <tbody>
+              <tr><td class="font-mono font-bold text-amber-400">1</td><td>Low Beam ON (100%)</td><td class="font-mono">0x100 [0x02, 100]</td></tr>
+              <tr><td class="font-mono font-bold text-amber-400">2</td><td>High Beam ON (100%)</td><td class="font-mono">0x100 [0x04, 100]</td></tr>
+              <tr><td class="font-mono font-bold text-amber-400">0</td><td>ALL Lights OFF</td><td class="font-mono">0x100 [0x00, 0]</td></tr>
+              <tr><td class="font-mono font-bold text-blue-400">h</td><td>Toggle Hazard Blinkers</td><td class="font-mono">0x102 [0x03]</td></tr>
+              <tr><td class="font-mono font-bold text-blue-400">w</td><td>Cycle Wiper Speed (Off&rarr;Int&rarr;Low&rarr;High)</td><td class="font-mono">0x101 [mode, 0]</td></tr>
+              <tr><td class="font-mono font-bold text-purple-400">t</td><td>Toggle Trunk (Open / Close)</td><td class="font-mono">0x103 [action]</td></tr>
+              <tr><td class="font-mono font-bold text-red-400">clear</td><td>Clear All Diagnostic DTC Faults</td><td class="font-mono">0x601 [0x00, 0x00]</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

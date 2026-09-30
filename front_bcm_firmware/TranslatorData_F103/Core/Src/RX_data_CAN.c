@@ -10,6 +10,7 @@
  */
 
 #include "RX_data_CAN.h"
+#include "main.h"
 #include "can_messages.h"
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +33,6 @@ static uint8_t prev_light_brightness = 0xFF;
 static uint8_t prev_wiper_mode       = 0xFF;
 static uint8_t prev_wiper_washer     = 0xFF;
 static uint8_t prev_turn_arm         = 0xFF;
-static uint8_t prev_blink_tick       = 0xFF;
 
 /* ── Internal helpers ───────────────────────────────────────────────────── */
 static void Log_To_PC(uint32_t id, uint8_t dlc, uint8_t *data)

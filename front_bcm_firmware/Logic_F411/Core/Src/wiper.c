@@ -87,8 +87,11 @@ uint8_t Get_WaterLevel_Status(void) {
 }
 
 static uint16_t Read_RainSensor_Raw(void) {
+    uint16_t raw = adc_dma_buffer[0];
+    extern ADC_HandleTypeDef hadc1;
+    HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_dma_buffer, 2);
     // Channel 0 (Rank 1 - PA0) được lưu ở phần tử 0
-    return adc_dma_buffer[0];
+    return raw;
 }
 
 // Hàm tính % Cảm biến mưa (Đúng theo độ nhạy chuẩn tuần trước: >3000: Khô 0%, 2400-3000: Mưa nhỏ 30%, 1800-2400: Mưa vừa 60%, <=1800: Mưa to 100%)

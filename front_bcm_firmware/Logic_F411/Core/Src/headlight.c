@@ -138,38 +138,27 @@ void Headlight_Task(void)
 
     if (f411_failsafe_active) {
         // [ISO 26262 ASIL-B FAIL-SAFE MODE]
-        // Khi mất mạng CAN hoàn toàn: Tự động bật đèn chiếu gần (Low Beam) 100% công suất
-        // để lái xe quan sát an toàn và tấp vào lề đường, tắt đèn pha và sương mù.
         is_cos_active    = 1;
         is_pha_active    = 0;
         is_fog_on        = 0;
         is_drl_on        = 1;
         final_brightness = 100;
-    } else if (f411_can_connected) {
-        // [CAN v3.0 CENTRAL COORDINATOR MODE - PURE EDGE EXECUTION]
-        // Chấp hành 100% lệnh từ bản tin 0x200 CAN_ID_EXEC_FRONT_LIGHTS
-        // Bit 0: DRL, Bit 1: Low Beam, Bit 2: High Beam, Bit 3: Fog Lamp
-        is_drl_on     = (f411_cmd_light_mask & EXEC_FRONT_DRL) ? 1 : 1;
-        is_cos_active = (f411_cmd_light_mask & EXEC_FRONT_HEADLIGHT) ? 1 : 0;
-        is_pha_active = (f411_cmd_light_mask & EXEC_FRONT_HIGH_BEAM) ? 1 : 0;
+    } else {
+        // Hợp nhất cả lệnh từ CAN (0x200) VÀ nút bấm vật lý trên bo mạch (PE13, PE14, PE15)
+        uint8_t can_or_btn_headlight = (f411_cmd_light_mask & EXEC_FRONT_HEADLIGHT) || is_headlight_power_on;
+        uint8_t can_or_btn_highbeam  = (f411_cmd_light_mask & EXEC_FRONT_HIGH_BEAM)  || (is_headlight_power_on && is_high_beam_selected);
+        uint8_t can_or_btn_fog       = (f411_cmd_light_mask & EXEC_FRONT_FOG)        || is_fog_on;
+
+        is_drl_on     = 1;
+        is_cos_active = can_or_btn_headlight ? 1 : 0;
+        is_pha_active = can_or_btn_highbeam ? 1 : 0;
         if (is_pha_active) {
             is_cos_active = 1; // Tiêu chuẩn: Bật pha vẫn duy trì cos chiếu gần
         }
-        is_fog_on = (f411_cmd_light_mask & EXEC_FRONT_FOG) ? 1 : 0;
+        is_fog_on = can_or_btn_fog ? 1 : 0;
 
         if (f411_cmd_light_brightness > 0) {
             final_brightness = f411_cmd_light_brightness;
-        }
-    } else {
-        // [STANDALONE BENCH TEST MODE - Không có CAN]
-        if (is_headlight_power_on) {
-            if (is_high_beam_selected) {
-                is_pha_active = 1;
-                is_cos_active = 1;
-            } else {
-                is_cos_active = 1;
-                is_pha_active = 0;
-            }
         }
     }
 

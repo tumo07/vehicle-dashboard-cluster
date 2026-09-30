@@ -467,6 +467,73 @@ def main():
 
     msg_cache = {}
 
+    import threading
+
+    def tx_input_loop():
+        print(f"{C_YELLOW}⌨️  INTERACTIVE CAN INJECTOR ACTIVE:{C_RESET}")
+        print(f"{C_GRAY}   Type [1]=Low Beam, [2]=High Beam, [0]=Lights Off, [drl]=DRL, [fog]=Fog{C_RESET}")
+        print(f"{C_GRAY}   Type [h]=Hazard, [l]=Left, [r]=Right, [toff]=Turn Off, [w]=Wiper, [t]=Trunk{C_RESET}\n")
+        while True:
+            try:
+                cmd = sys.stdin.readline()
+                if not cmd: break
+                cmd = cmd.strip().lower()
+                if not cmd: continue
+
+                payload = None
+                label = ""
+                if cmd in ('1', 'low'):
+                    payload = b"CAN:100:2:0264\r\n"
+                    label = "CMD_LIGHT: LOW BEAM (100%)"
+                elif cmd in ('2', 'high'):
+                    payload = b"CAN:100:2:0364\r\n"
+                    label = "CMD_LIGHT: HIGH BEAM (100%)"
+                elif cmd in ('0', 'off'):
+                    payload = b"CAN:100:2:0000\r\n"
+                    label = "CMD_LIGHT: ALL LIGHTS OFF"
+                elif cmd == 'drl':
+                    payload = b"CAN:100:2:0164\r\n"
+                    label = "CMD_LIGHT: DRL ON"
+                elif cmd == 'fog':
+                    payload = b"CAN:100:2:0464\r\n"
+                    label = "CMD_LIGHT: FOG ON"
+                elif cmd in ('h', 'hazard'):
+                    payload = b"CAN:102:1:03\r\n"
+                    label = "CMD_TURN: HAZARD"
+                elif cmd in ('l', 'left'):
+                    payload = b"CAN:102:1:01\r\n"
+                    label = "CMD_TURN: LEFT"
+                elif cmd in ('r', 'right'):
+                    payload = b"CAN:102:1:02\r\n"
+                    label = "CMD_TURN: RIGHT"
+                elif cmd in ('toff', 'stopturn'):
+                    payload = b"CAN:102:1:00\r\n"
+                    label = "CMD_TURN: OFF"
+                elif cmd in ('w', 'wiper'):
+                    payload = b"CAN:101:2:0300\r\n"
+                    label = "CMD_WIPER: NORMAL MODE"
+                elif cmd in ('woff',):
+                    payload = b"CAN:101:2:0000\r\n"
+                    label = "CMD_WIPER: OFF"
+                elif cmd in ('t', 'trunk'):
+                    payload = b"CAN:103:1:01\r\n"
+                    label = "CMD_TRUNK: OPEN"
+                else:
+                    if cmd.upper().startswith("CAN:"):
+                        payload = (cmd.upper() + "\r\n").encode('utf-8')
+                        label = f"RAW INJECTION: {cmd.upper()}"
+                    else:
+                        print(f"{C_GRAY}Unknown command '{cmd}'. Available: 1, 2, 0, drl, fog, h, l, r, toff, w, t{C_RESET}")
+                        continue
+
+                if payload:
+                    ser.write(payload)
+                    print(f"{C_YELLOW}🚀 >>> [TX SENT] {label} ({payload.decode().strip()}){C_RESET}")
+            except Exception:
+                break
+
+    threading.Thread(target=tx_input_loop, daemon=True).start()
+
     while True:
         try:
             raw_line = ser.readline().decode('utf-8', errors='ignore').strip()

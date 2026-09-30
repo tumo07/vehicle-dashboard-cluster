@@ -27,8 +27,14 @@ void TurnSignal_Task(void){
     static uint8_t lastCmdTurn = 0xFF;
     if (currentCmdTurn != lastCmdTurn) {
         lastCmdTurn = currentCmdTurn;
-        if (currentCmdTurn <= CMD_TURN_HAZARD) {
-            currentTurnMode = (CmdTurn_t)currentCmdTurn;
+        if (currentCmdTurn & EXEC_TURN_HAZARD_ARM) {
+            currentTurnMode = CMD_TURN_HAZARD;
+        } else if (currentCmdTurn & EXEC_TURN_LEFT_ARM) {
+            currentTurnMode = CMD_TURN_LEFT;
+        } else if (currentCmdTurn & EXEC_TURN_RIGHT_ARM) {
+            currentTurnMode = CMD_TURN_RIGHT;
+        } else {
+            currentTurnMode = CMD_TURN_OFF;
         }
     }
 

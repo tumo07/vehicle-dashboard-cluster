@@ -257,10 +257,11 @@ static void Update_Sensors(void)
     /* Headlight button debounce (PA0 = onboard USER button) */
     uint8_t btn = HAL_GPIO_ReadPin(BTN_HEADLIGHT_GPIO_Port, BTN_HEADLIGHT_Pin);
     if (btn && !g_btn_prev) {
-        if (g_veh.light_flags & STATUS_HEADLIGHT_ON)
-            g_veh.light_flags &= ~STATUS_HEADLIGHT_ON;
-        else
-            g_veh.light_flags |=  STATUS_HEADLIGHT_ON;
+        if (g_veh.light_flags & STATUS_HEADLIGHT_ON) {
+            Execute_LightCmd(CMD_LIGHT_OFF, 100U);
+        } else {
+            Execute_LightCmd(CMD_LIGHT_HEADLIGHT_LOW, 100U);
+        }
     }
     g_btn_prev = btn;
 }
@@ -550,6 +551,20 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *phcan)
                 else                             g_veh.light_flags &= ~STATUS_HEADLIGHT_ON;
                 if (d[0] & FRONT_ACT_DRL)       g_veh.light_flags |= STATUS_DRL_ON;
                 else                             g_veh.light_flags &= ~STATUS_DRL_ON;
+                if (d[0] & FRONT_ACT_HIGH_BEAM) g_veh.light_flags |= STATUS_HIGH_BEAM_ON;
+                else                             g_veh.light_flags &= ~STATUS_HIGH_BEAM_ON;
+                if (d[0] & FRONT_ACT_FOG)       g_veh.light_flags |= STATUS_FOG_ON;
+                else                             g_veh.light_flags &= ~STATUS_FOG_ON;
+
+                /* Turn Signal / Hazard input from Front BCM buttons */
+                if ((d[0] & (FRONT_ACT_LTURN | FRONT_ACT_RTURN)) == (FRONT_ACT_LTURN | FRONT_ACT_RTURN)) {
+                    if (g_veh.turn_armed != CMD_TURN_HAZARD) Execute_TurnCmd(CMD_TURN_HAZARD);
+                } else if (d[0] & FRONT_ACT_LTURN) {
+                    if (g_veh.turn_armed != CMD_TURN_LEFT) Execute_TurnCmd(CMD_TURN_LEFT);
+                } else if (d[0] & FRONT_ACT_RTURN) {
+                    if (g_veh.turn_armed != CMD_TURN_RIGHT) Execute_TurnCmd(CMD_TURN_RIGHT);
+                }
+                Broadcast_LightState();
             }
             break;
         case CAN_ID_REPORT_REAR_STATUS:

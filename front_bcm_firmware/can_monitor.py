@@ -189,18 +189,17 @@ def main():
                 continue
 
             # --- SMART SPAM FILTER ---
-            # If payload changed, print immediately. If identical, print only once per 1.5 seconds.
+            # If payload changed, print immediately. If identical, SILENCE IT COMPLETELY.
             # (For heartbeats, we only look at the 'flags' byte because the 'uptime' counter always changes!)
             if can_id in ("700", "710", "720") and len(b) >= 2:
                 key = ("HB", b[1])
             else:
                 key = tuple(b)
                 
-            if key == msg_cache.get(can_id) and (now - msg_time.get(can_id, 0)) < 1.5:
+            if key == msg_cache.get(can_id):
                 continue
             
             msg_cache[can_id] = key
-            msg_time[can_id] = now
 
             # --- DECODERS ---
             if can_id in ("700", "710", "720"):

@@ -137,24 +137,28 @@ void Headlight_Task(void)
     uint8_t is_pha_active    = 0;
     uint8_t is_drl_on        = 1; // DRL (Daytime Running Light) luôn duy trì khi bật khóa điện
     uint8_t final_brightness = current_brightness_pct;
+    uint8_t is_fog_active    = 0;
 
     // Kiểm tra mất kết nối Bus CAN > 1200ms -> Kích hoạt ASIL-B Fail-Safe
     if (f411_can_connected && (currentTick - f411_last_can_cmd_tick > 1200)) {
         f411_failsafe_active = 1;
     }
 
+    // Đọc trạng thái mưa từ cảm biến mưa (PA0)
+    uint8_t is_raining = (Get_RainSensor_Percent() > 0) ? 1 : 0;
+
     if (f411_failsafe_active) {
         // [ISO 26262 ASIL-B FAIL-SAFE MODE]
         is_cos_active    = 1;
         is_pha_active    = 0;
-        is_fog_on        = 0;
+        is_fog_active    = is_raining ? 1 : 0; // Tự động bật đèn Fog nếu trời mưa ngay cả khi mất CAN
         is_drl_on        = 1;
         final_brightness = 100;
     } else {
-        // Hợp nhất cả lệnh từ CAN (0x200) VÀ nút bấm vật lý trên bo mạch (PE13, PE14, PE15)
+        // Hợp nhất cả lệnh từ CAN (0x200), nút bấm vật lý trên bo mạch (PE15) VÀ cảm biến mưa tự động
         uint8_t can_or_btn_headlight = (f411_cmd_light_mask & EXEC_FRONT_HEADLIGHT) || is_headlight_power_on;
         uint8_t can_or_btn_highbeam  = (f411_cmd_light_mask & EXEC_FRONT_HIGH_BEAM)  || (is_headlight_power_on && is_high_beam_selected);
-        uint8_t can_or_btn_fog       = (f411_cmd_light_mask & EXEC_FRONT_FOG)        || is_fog_on;
+        uint8_t can_or_btn_fog       = (f411_cmd_light_mask & EXEC_FRONT_FOG)        || is_fog_on || is_raining;
 
         is_drl_on     = 1;
         is_cos_active = can_or_btn_headlight ? 1 : 0;
@@ -162,7 +166,7 @@ void Headlight_Task(void)
         if (is_pha_active) {
             is_cos_active = 1; // Tiêu chuẩn: Bật pha vẫn duy trì cos chiếu gần
         }
-        is_fog_on = can_or_btn_fog ? 1 : 0;
+        is_fog_active = can_or_btn_fog ? 1 : 0;
 
         if (f411_cmd_light_brightness > 0) {
             final_brightness = f411_cmd_light_brightness;
@@ -174,18 +178,20 @@ void Headlight_Task(void)
     Headlight_Set_PWM_Pulse(HL_TIM_CHANNEL_PHA, is_pha_active ? final_brightness : 0); // PB8 - Pha
 
     // Xuất trực tiếp GPIO Port E cho Fog (PE12) và DRL (PE11)
-    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_12, is_fog_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_12, is_fog_active ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11, is_drl_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
     // 5. Cập nhật cờ báo cáo trạng thái CAN 0x400 (Report Front Status)
     current_actuator_flags = 0;
-    if (is_drl_on)      current_actuator_flags |= FRONT_ACT_DRL;       // Bit 0 (0x01)
-    if (is_cos_active)  current_actuator_flags |= FRONT_ACT_HEADLIGHT; // Bit 1 (0x02) - Low Beam
-    if (is_fog_on)      current_actuator_flags |= FRONT_ACT_FOG;       // Bit 2 (0x04)
-    if (is_pha_active)  current_actuator_flags |= FRONT_ACT_HIGH_BEAM;  // Bit 7 (0x80) - High Beam
+    if (is_drl_on)        current_actuator_flags |= FRONT_ACT_DRL;       // Bit 0 (0x01)
+    if (is_cos_active)    current_actuator_flags |= FRONT_ACT_HEADLIGHT; // Bit 1 (0x02) - Low Beam
+    if (is_fog_active)    current_actuator_flags |= FRONT_ACT_FOG;       // Bit 2 (0x04)
+    if (is_pha_active)    current_actuator_flags |= FRONT_ACT_HIGH_BEAM;  // Bit 7 (0x80) - High Beam
 
-    // Gửi báo cáo tức thì khi nút bấm vật lý thay đổi
-    if (btn_changed) {
+    // Gửi báo cáo tức thì khi nút bấm vật lý hoặc trạng thái đèn Fog thay đổi
+    static uint8_t last_reported_fog = 0;
+    if (btn_changed || (is_fog_active != last_reported_fog)) {
+        last_reported_fog = is_fog_active;
         Bridge_SendWiperTurnStatus((uint8_t)Servo_GetWiperMode(), (uint8_t)TurnSignal_GetMode());
     }
 }
